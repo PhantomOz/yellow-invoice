@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* ------------------------------- */
+  /* NEON NOIR PALETTE DEFINITIONS   */
+  /* ------------------------------- */
+  --primary-cta-40: #fde057; /* Actionable Yellow */
+  --primary-cta-60: #fcd000; /* Nitrolite Core */
+  --primary-cta-90: #ecaa00; /* Deep Gold/Settled */
+  --primary-layer-60: #000000; /* Pure Black */
+
+  /* Cyan Accents (for the "Pay" section contrast) */
+  --secondary-cta-40: #67e8f9;
+  --secondary-cta-60: #22d3ee;
+
+  /* ------------------------------- */
+  /* BASE THEME (Default is Dark)    */
+  /* ------------------------------- */
+  --background: #000000;
+  --foreground: #ededed;
+
+  /* Surface / Cards - Slightly lighter than black */
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+
+  /* Popovers */
+  --popover: #0a0a0a;
+  --popover-foreground: #ededed;
+
+  /* Primary Brand Color (Gold) */
+  --primary: #fcd000;
+  --primary-foreground: #000000;
+
+  /* Secondary (Muted/Cyan options) */
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+
+  /* Muted Elements */
+  --muted: #1a1a1a;
+  --muted-foreground: #a1a1aa;
+
+  /* Accents (Hover states) */
+  --accent: #1a1a1a;
+  --accent-foreground: #fcd000; /* Gold text on hover */
+
+  /* Destructive */
+  --destructive: #7f1d1d;
+  --destructive-foreground: #ffe4e6;
+
+  /* Borders & Inputs (Ghost Style) */
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.1);
+
+  /* Focus Rings (Gold Glow) */
+  --ring: rgba(253, 208, 0, 0.5);
+
+  /* Radius */
+  --radius: 0.625rem;
+
+  /* Charts (Mapped to your Palette) */
+  --chart-1: #fcd000; /* Gold */
+  --chart-2: #22d3ee; /* Cyan */
+  --chart-3: #a1a1aa; /* Gray */
+  --chart-4: #fde057; /* Light Gold */
+  --chart-5: #ecaa00; /* Dark Gold */
+
+  /* Sidebar Specifics */
+  --sidebar: #050505; /* Deep rich black */
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #fcd000;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #fcd000;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(253, 208, 0, 0.5);
+}
+
+@theme inline {
+  /* Tailwind v4 theme mappings */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Chart Mappings */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar Mappings */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Custom Neon Noir Variables */
+  --color-cta-40: var(--primary-cta-40);
+  --color-cta-60: var(--primary-cta-60);
+  --color-cta-90: var(--primary-cta-90);
+  --color-cta-secondary-40: var(--secondary-cta-40);
+  --color-cta-secondary-60: var(--secondary-cta-60);
+  --color-layer-60: var(--primary-layer-60);
+
+  /* Radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  /* Fonts */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Base Styles */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+/* Custom Animations */
+@keyframes electric-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(253, 224, 87, 0);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(253, 224, 87, 0.8),
+      0 0 60px rgba(253, 224, 87, 0.4);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
