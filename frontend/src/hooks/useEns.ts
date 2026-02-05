@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useWallets } from '@privy-io/react-auth';
 import {
     createPublicClient,
     createWalletClient,
@@ -105,6 +106,7 @@ const YELLOW_REGISTRAR_ADDRESS = '0x2F1f83A5802e24Cae6cb835406Fc71946231D97E';
 export function useYellowEns() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { wallets } = useWallets();
 
     // Check if a subname is available
     const checkAvailability = useCallback(async (label: string) => {
@@ -127,17 +129,18 @@ export function useYellowEns() {
         }
     }, []);
 
-    // Register a subname
     const registerSubname = useCallback(async (label: string) => {
-        if (!window.ethereum) throw new Error('No wallet found');
+        const wallet = wallets[0];
+        if (!wallet) throw new Error('No wallet found');
 
         setIsLoading(true);
         setError(null);
 
         try {
+            const provider = await wallet.getEthereumProvider();
             const walletClient = createWalletClient({
                 chain: baseSepolia,
-                transport: custom(window.ethereum as any)
+                transport: custom(provider)
             });
 
             const [address] = await walletClient.getAddresses();
@@ -233,7 +236,9 @@ export function useYellowEns() {
     }, []);
 
     const setTextRecord = useCallback(async (label: string, key: string, value: string) => {
-        if (!window.ethereum) throw new Error('No wallet found');
+        const wallet = wallets[0];
+        if (!wallet) throw new Error('No wallet found');
+
         setIsLoading(true);
         try {
             const publicClient = createPublicClient({
@@ -262,9 +267,10 @@ export function useYellowEns() {
                 args: [baseNode, label]
             });
 
+            const provider = await wallet.getEthereumProvider();
             const walletClient = createWalletClient({
                 chain: baseSepolia,
-                transport: custom(window.ethereum as any)
+                transport: custom(provider)
             });
             const [address] = await walletClient.getAddresses();
 
