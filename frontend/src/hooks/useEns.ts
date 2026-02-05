@@ -49,6 +49,54 @@ const YELLOW_REGISTRAR_ABI = [
         inputs: [{ name: 'owner', type: 'address' }],
         outputs: [{ type: 'string' }],
         stateMutability: 'view'
+    },
+    {
+        name: 'registry',
+        type: 'function',
+        inputs: [],
+        outputs: [{ type: 'address' }],
+        stateMutability: 'view'
+    }
+] as const;
+
+const L2_REGISTRY_ABI = [
+    {
+        name: 'setText',
+        type: 'function',
+        inputs: [
+            { name: 'node', type: 'bytes32' },
+            { name: 'key', type: 'string' },
+            { name: 'value', type: 'string' }
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable'
+    },
+    {
+        name: 'text',
+        type: 'function',
+        inputs: [
+            { name: 'node', type: 'bytes32' },
+            { name: 'key', type: 'string' }
+        ],
+        outputs: [{ type: 'string' }],
+        stateMutability: 'view'
+    },
+    {
+        name: 'baseNode',
+        type: 'function',
+        inputs: [],
+        outputs: [{ type: 'bytes32' }],
+        stateMutability: 'view'
+    },
+    {
+        name: 'makeNode',
+        type: 'function',
+        inputs: [
+            { name: 'parentNode', type: 'bytes32' },
+            { name: 'label', type: 'string' }
+        ],
+        outputs: [{ type: 'bytes32' }],
+        stateMutability: 'pure'
     }
 ] as const;
 
@@ -184,12 +232,106 @@ export function useYellowEns() {
         }
     }, []);
 
+    const setTextRecord = useCallback(async (label: string, key: string, value: string) => {
+        if (!window.ethereum) throw new Error('No wallet found');
+        setIsLoading(true);
+        try {
+            const publicClient = createPublicClient({
+                chain: baseSepolia,
+                transport: http()
+            });
+
+
+            const registryAddress = await publicClient.readContract({
+                address: YELLOW_REGISTRAR_ADDRESS,
+                abi: YELLOW_REGISTRAR_ABI,
+                functionName: 'registry'
+            });
+
+
+            const baseNode = await publicClient.readContract({
+                address: registryAddress,
+                abi: L2_REGISTRY_ABI,
+                functionName: 'baseNode'
+            });
+
+            const node = await publicClient.readContract({
+                address: registryAddress,
+                abi: L2_REGISTRY_ABI,
+                functionName: 'makeNode',
+                args: [baseNode, label]
+            });
+
+            const walletClient = createWalletClient({
+                chain: baseSepolia,
+                transport: custom(window.ethereum as any)
+            });
+            const [address] = await walletClient.getAddresses();
+
+            const hash = await walletClient.writeContract({
+                address: registryAddress,
+                abi: L2_REGISTRY_ABI,
+                functionName: 'setText',
+                args: [node, key, value],
+                account: address
+            });
+            return hash;
+        } catch (err: any) {
+            console.error("Error setting text record:", err);
+            setError(err.message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    const getTextRecord = useCallback(async (label: string, key: string) => {
+        const client = createPublicClient({
+            chain: baseSepolia,
+            transport: http()
+        });
+
+        try {
+            const registryAddress = await client.readContract({
+                address: YELLOW_REGISTRAR_ADDRESS,
+                abi: YELLOW_REGISTRAR_ABI,
+                functionName: 'registry'
+            });
+
+            const baseNode = await client.readContract({
+                address: registryAddress,
+                abi: L2_REGISTRY_ABI,
+                functionName: 'baseNode'
+            });
+
+            const node = await client.readContract({
+                address: registryAddress,
+                abi: L2_REGISTRY_ABI,
+                functionName: 'makeNode',
+                args: [baseNode, label]
+            });
+
+            const value = await client.readContract({
+                address: registryAddress,
+                abi: L2_REGISTRY_ABI,
+                functionName: 'text',
+                args: [node, key]
+            });
+            return value;
+        } catch (err) {
+            console.error('Error fetching text record:', err);
+            return null;
+        }
+    }, []);
+
     return {
         checkAvailability,
         registerSubname,
         resolveSubname,
         checkHasSubname,
         getRegisteredName,
+        setTextRecord,
+        getTextRecord,
         isLoading,
         error
     };
