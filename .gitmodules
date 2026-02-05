@@ -1,0 +1,3 @@
+[submodule "contracts/lib/durin"]
+	path = contracts/lib/durin
+	url = https://github.com/namestonehq/durin

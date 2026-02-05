@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
@@ -16,9 +16,17 @@ import {
   IconReceipt,
 } from "@tabler/icons-react";
 import { useInvoiceModal } from "@/components/invoicing/InvoiceModalContext";
+import { useYellowEns } from "@/hooks/useEns";
 
 export default function Home() {
   const { openModal } = useInvoiceModal();
+  const { resolveSubname, getRegisteredName } = useYellowEns();
+
+  useEffect(() => {
+    const address = resolveSubname("testname");
+    const name = getRegisteredName("0x1192ebae3138f066c3914e428c0a29a8e39668e7");
+    console.log(address, name);
+  }, []);
   return (
     <>
       <header className="mb-10 flex items-center justify-between">

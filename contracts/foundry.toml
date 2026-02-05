@@ -3,4 +3,19 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+# Add remappings for Durin
+remappings = [
+    "@openzeppelin/contracts/=lib/durin/lib/openzeppelin-contracts/contracts/",
+    "@ensdomains/ens-contracts/=lib/durin/lib/ens-contracts/contracts/",
+    "durin/=lib/durin/src/",
+    "solidity-stringutils/=lib/durin/lib/solidity-stringutils/"
+]
+
+# L2 RPC URLs (for deployment)
+[rpc_endpoints]
+base = "${BASE_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+arbitrum = "${ARBITRUM_RPC_URL}"
+arbitrum_sepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
