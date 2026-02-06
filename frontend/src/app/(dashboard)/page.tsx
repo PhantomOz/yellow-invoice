@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
@@ -17,36 +17,52 @@ import {
 } from "@tabler/icons-react";
 import { useInvoiceModal } from "@/components/invoicing/InvoiceModalContext";
 import { useYellowEns } from "@/hooks/useEns";
+import { usePrivy } from "@privy-io/react-auth";
+import LoginButton from "@/components/auth/login-button";
 
 export default function Home() {
   const { openModal } = useInvoiceModal();
-  const { resolveSubname, getRegisteredName } = useYellowEns();
+  const { getRegisteredName, checkHasSubname } = useYellowEns();
+  const { user, authenticated } = usePrivy();
+  const [ensName, setEnsName] = useState<string | null>(null);
 
+  const walletAddress = user?.wallet?.address;
+
+  // Fetch ENS name for the wallet
   useEffect(() => {
-    const address = resolveSubname("testname");
-    const name = getRegisteredName("0x1192ebae3138f066c3914e428c0a29a8e39668e7");
-    console.log(address, name);
-  }, []);
+    async function fetchEnsName() {
+      if (!walletAddress) return;
+
+      const hasName = await checkHasSubname(walletAddress);
+      if (hasName) {
+        const name = await getRegisteredName(walletAddress);
+        if (name) {
+          setEnsName(name);
+        }
+      }
+    }
+
+    fetchEnsName();
+  }, [walletAddress, checkHasSubname, getRegisteredName]);
+
+  const displayName = useMemo(() => {
+    if (ensName) return ensName;
+    if (user?.google?.name) return user.google.name.split(" ")[0];
+    if (user?.email?.address) return user.email.address.split("@")[0];
+    if (walletAddress)
+      return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+    return "there";
+  }, [ensName, user?.google?.name, user?.email?.address, walletAddress]);
+
   return (
     <>
       <header className="mb-10 flex items-center justify-between">
         <div className="flex items-center gap-2 text-2xl font-semibold">
           <span className="text-[var(--primary-cta-40)]">👋</span>
-          <h1>Hey Jeffrey</h1>
-          <span className="text-[var(--muted-foreground)] text-sm font-normal bg-[var(--muted)] px-1.5 rounded-full">
-            ?
-          </span>
+          <h1>Hey {displayName}</h1>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-xs font-semibold">Jeffrey Owoloko</p>
-            <p className="text-[10px] text-[var(--muted-foreground)]">
-              jeffowoloko@gmail.com
-            </p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-xs font-medium">
-            JO
-          </div>
+          <LoginButton />
         </div>
       </header>
 
