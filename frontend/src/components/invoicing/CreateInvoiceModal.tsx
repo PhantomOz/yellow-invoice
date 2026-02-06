@@ -32,7 +32,7 @@ export function CreateInvoiceModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-      <DialogContent className="max-w-2xl gap-0 p-0 sm:rounded-[var(--radius)] border-[var(--border)] bg-[var(--card)]">
+      <DialogContent className="w-full h-full sm:h-auto max-w-2xl gap-0 p-0 sm:rounded-[var(--radius)] border-[var(--border)] bg-[var(--card)] overflow-y-auto sm:overflow-visible my-0 sm:my-8 rounded-none">
         {/* HEADER: Stepper & Title */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-[var(--border)]">
           <div>
@@ -84,7 +84,7 @@ export function CreateInvoiceModal({
                     className="w-full bg-[var(--muted)]/30 border border-transparent focus:border-[var(--primary-cta-40)] rounded-lg py-3 pl-10 text-sm text-[var(--foreground)] outline-none transition-all placeholder:text-[var(--muted-foreground)]"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="relative group">
                     <IconCalendar
                       className="absolute left-3 top-3 text-[var(--muted-foreground)] group-focus-within:text-[var(--primary-cta-60)] transition-colors"

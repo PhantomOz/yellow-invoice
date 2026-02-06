@@ -56,8 +56,8 @@ export default function Home() {
 
   return (
     <>
-      <header className="mb-10 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-2xl font-semibold">
+      <header className="mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-0">
+        <div className="flex items-center gap-2 text-xl md:text-2xl font-semibold">
           <span className="text-[var(--primary-cta-40)]">👋</span>
           <h1>Hey {displayName}</h1>
         </div>
@@ -79,7 +79,7 @@ export default function Home() {
             </div>
           }
         >
-          <div className="grid grid-cols-3 gap-4 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
             <SummaryCard
               label="Received this month"
               value="$0.00"
@@ -98,11 +98,11 @@ export default function Home() {
           </div>
         </SectionHeader>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <StatCard
             title="Monthly Pay-ins"
             subtitle="Cash Inflows"
-            className="col-span-2"
+            className="col-span-1 lg:col-span-2"
           >
             <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
               <IconChartBar className="mb-2 opacity-20" size={32} />
@@ -166,7 +166,7 @@ export default function Home() {
             </ActionButton>
           }
         >
-          <div className="grid grid-cols-3 gap-4 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
             <SummaryCard
               label="Paid this month"
               value="$0.00"
@@ -181,11 +181,11 @@ export default function Home() {
           </div>
         </SectionHeader>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <StatCard
             title="Monthly Payouts"
             subtitle="Cash Outflows"
-            className="col-span-2"
+            className="col-span-1 lg:col-span-2"
           >
             <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
               <IconChartBar className="mb-2 opacity-20" size={32} />
