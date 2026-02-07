@@ -12,14 +12,14 @@ export default function InvoicingPage() {
 
   return (
     <>
-      <header className="mb-10 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-2xl font-semibold">
+      <header className="mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-0">
+        <div className="flex items-center gap-2 text-xl md:text-2xl font-semibold">
           <div className="p-2 rounded-lg bg-[var(--primary-cta-40)]/10 text-[var(--primary-cta-40)]">
             <IconFileInvoice size={24} />
           </div>
           <h1>Invoices</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-end md:self-auto">
           <div className="text-right">
             <p className="text-xs font-semibold">Jeffrey Owoloko</p>
             <p className="text-[10px] text-[var(--muted-foreground)]">

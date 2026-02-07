@@ -49,7 +49,8 @@ export function InvoiceTable() {
         </button>
       </div>
 
-      <div className="border border-[var(--border)] rounded-[var(--radius)] overflow-hidden bg-[var(--card)]">
+      {/* Desktop Table View */}
+      <div className="hidden md:block border border-[var(--border)] rounded-[var(--radius)] overflow-hidden bg-[var(--card)]">
         <table className="w-full text-left text-sm">
           <thead className="bg-[var(--muted)] text-[var(--muted-foreground)]">
             <tr>
@@ -81,6 +82,37 @@ export function InvoiceTable() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4">
+        {invoices.map((invoice) => (
+          <div
+            key={invoice.id}
+            className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-col gap-3"
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="font-mono text-xs text-[var(--muted-foreground)] mb-1 block">
+                  {invoice.id}
+                </span>
+                <span className="font-medium text-base block">
+                  {invoice.client}
+                </span>
+              </div>
+              <StatusTracker status={invoice.status} />
+            </div>
+
+            <div className="flex justify-between items-end border-t border-[var(--border)] pt-3 mt-1">
+              <div className="text-xs text-[var(--muted-foreground)]">
+                Created: <span className="font-mono ml-1">{invoice.date}</span>
+              </div>
+              <div className="font-mono font-medium text-lg">
+                {invoice.amount}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
