@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
@@ -20,13 +20,67 @@ import { useYellowEns } from "@/hooks/useEns";
 import { usePrivy } from "@privy-io/react-auth";
 import LoginButton from "@/components/auth/login-button";
 
+import { useUserInvoices } from "@/hooks/useUserInvoices";
+import { type Address } from "viem";
+
 export default function Home() {
   const { openModal } = useInvoiceModal();
   const { getRegisteredName, checkHasSubname } = useYellowEns();
-  const { user, authenticated } = usePrivy();
+  const { user } = usePrivy();
   const [ensName, setEnsName] = useState<string | null>(null);
 
-  const walletAddress = user?.wallet?.address;
+  const walletAddress = user?.wallet?.address as Address | undefined;
+  const { invoices, isLoading } = useUserInvoices(walletAddress || null);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let received = 0;
+    let toReceive = 0;
+    let unpaidCount = 0;
+
+    invoices.forEach((invoice) => {
+      const amount = Number(invoice.amount) / 1_000_000;
+      const createdDate = new Date(Number(invoice.createdAt) * 1000);
+      const isCurrentMonth =
+        createdDate.getMonth() === currentMonth &&
+        createdDate.getFullYear() === currentYear;
+
+      // Status 1 is Paid
+      if (invoice.status === "1") {
+        const settledDate = invoice.settledAt
+          ? new Date(Number(invoice.settledAt) * 1000)
+          : createdDate;
+
+        if (
+          settledDate.getMonth() === currentMonth &&
+          settledDate.getFullYear() === currentYear
+        ) {
+          received += amount;
+        }
+      } else {
+        // Status != 1 is Pending/Overdue
+        if (isCurrentMonth) {
+          toReceive += amount;
+        }
+        unpaidCount++;
+      }
+    });
+
+    return {
+      received: received.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+      }),
+      toReceive: toReceive.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+      }),
+      unpaidCount,
+    };
+  }, [invoices]);
 
   // Fetch ENS name for the wallet
   useEffect(() => {
@@ -82,17 +136,17 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
             <SummaryCard
               label="Received this month"
-              value="$0.00"
+              value={stats.received}
               icon={IconArrowDownLeft}
             />
             <SummaryCard
               label="To receive this month"
-              value="$0.00"
+              value={stats.toReceive}
               icon={IconClock}
             />
             <SummaryCard
               label="Invoices to get paid"
-              value="0"
+              value={stats.unpaidCount.toString()}
               icon={IconFileInvoice}
             />
           </div>

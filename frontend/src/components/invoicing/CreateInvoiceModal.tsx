@@ -1,16 +1,22 @@
 import React, { useState } from "react";
 import {
   IconUser,
-  IconCalendar,
   IconPlus,
   IconTrash,
   IconArrowRight,
   IconArrowLeft,
   IconCheck,
-  IconX,
+  IconLoader2,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
+import { useInvoiceContract } from "@/hooks/useInvoiceContract";
+import { useWallets } from "@privy-io/react-auth";
+import { arcTestnet } from "viem/chains";
+
+const ARC_TESTNET_CHAIN_ID = arcTestnet.id;
 
 export function CreateInvoiceModal({
   isOpen,
@@ -22,8 +28,101 @@ export function CreateInvoiceModal({
   const [step, setStep] = useState(1);
   const totalSteps = 3;
 
-  // Invoice State
+  // Form State
+  const [clientName, setClientName] = useState("");
+  const [issuedDate, setIssuedDate] = useState<Date | undefined>(undefined);
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [terms, setTerms] = useState("");
   const [items, setItems] = useState([{ id: 1, desc: "", qty: 1, price: 0 }]);
+
+  // Contract Hook
+  const { createInvoice, isLoading, error, isConnected } = useInvoiceContract();
+  const { wallets } = useWallets();
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false);
+
+  // Calculate total from items
+  const total = items.reduce((sum, item) => sum + item.qty * item.price, 0);
+
+  // Format services as comma-separated list
+  const servicesDescription = items
+    .filter((item) => item.desc.trim())
+    .map((item) => `${item.desc} (x${item.qty})`)
+    .join(", ");
+
+  // Handle form submission to blockchain
+  const handleSubmit = async () => {
+    if (!isConnected) {
+      setSubmitError("Please connect your wallet first");
+      return;
+    }
+
+    if (!clientName.trim()) {
+      setSubmitError("Client name is required");
+      return;
+    }
+
+    setSubmitError(null);
+
+    // Get the active wallet and check/switch chain
+    const wallet = wallets[0];
+    if (wallet) {
+      try {
+        const currentChainId = parseInt(
+          wallet.chainId.split(":")[1] || "0",
+          10,
+        );
+
+        if (currentChainId !== ARC_TESTNET_CHAIN_ID) {
+          setIsSwitchingChain(true);
+          setSubmitError(null);
+
+          await wallet.switchChain(ARC_TESTNET_CHAIN_ID);
+          setIsSwitchingChain(false);
+        }
+      } catch (switchError: any) {
+        setIsSwitchingChain(false);
+        setSubmitError(
+          `Failed to switch to Arc Testnet: ${switchError.message || "Unknown error"}`,
+        );
+        return;
+      }
+    }
+
+    const issuedTimestamp = issuedDate
+      ? Math.floor(issuedDate.getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+    const dueTimestamp = dueDate
+      ? Math.floor(dueDate.getTime() / 1000)
+      : issuedTimestamp + 30 * 24 * 60 * 60; // Default: 30 days from issued
+
+    const amountInSmallestUnit = BigInt(Math.round(total * 1_000_000));
+
+    const result = await createInvoice({
+      amount: amountInSmallestUnit,
+      clientName: clientName.trim(),
+      issuedDate: issuedTimestamp,
+      dueDate: dueTimestamp,
+      terms: terms.trim() || "Net 30",
+      services: servicesDescription || "Services",
+    });
+
+    if (result) {
+      setTxHash(result.hash);
+      setTimeout(() => {
+        onClose();
+        // Reset state
+        setStep(1);
+        setClientName("");
+        setIssuedDate(undefined);
+        setDueDate(undefined);
+        setTerms("");
+        setItems([{ id: 1, desc: "", qty: 1, price: 0 }]);
+        setTxHash(null);
+      }, 2000);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -32,13 +131,13 @@ export function CreateInvoiceModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-      <DialogContent className="w-full h-full sm:h-auto max-w-2xl gap-0 p-0 sm:rounded-[var(--radius)] border-[var(--border)] bg-[var(--card)] overflow-y-auto sm:overflow-visible my-0 sm:my-8 rounded-none">
+      <DialogContent className="sm:max-w-2xl bg-neutral-950 border-neutral-800 rounded-3xl">
         {/* HEADER: Stepper & Title */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-[var(--border)]">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">
+            <DialogTitle className="text-lg font-semibold tracking-tight">
               Create Invoice
-            </h2>
+            </DialogTitle>
             <div className="flex items-center gap-2 mt-2">
               {[1, 2, 3].map((s) => (
                 <div key={s} className="flex items-center gap-2">
@@ -74,39 +173,37 @@ export function CreateInvoiceModal({
                 </label>
                 <div className="group relative">
                   <IconUser
-                    className="absolute left-3 top-3 text-[var(--muted-foreground)] group-focus-within:text-[var(--primary-cta-60)] transition-colors"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] group-focus-within:text-[var(--primary-cta-60)] transition-colors z-10"
                     size={18}
                   />
-                  <input
+                  <Input
                     autoFocus
                     type="text"
-                    placeholder="Select Client..."
-                    className="w-full bg-[var(--muted)]/30 border border-transparent focus:border-[var(--primary-cta-40)] rounded-lg py-3 pl-10 text-sm text-[var(--foreground)] outline-none transition-all placeholder:text-[var(--muted-foreground)]"
+                    placeholder="Client Name..."
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className="pl-10 h-11 bg-neutral-900 border-neutral-800"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="relative group">
-                    <IconCalendar
-                      className="absolute left-3 top-3 text-[var(--muted-foreground)] group-focus-within:text-[var(--primary-cta-60)] transition-colors"
-                      size={18}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Issued Date"
-                      className="w-full bg-[var(--muted)]/30 border border-transparent focus:border-[var(--primary-cta-40)] rounded-lg py-3 pl-10 text-sm text-[var(--foreground)] outline-none transition-all"
-                      onFocus={(e) => (e.target.type = "date")}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      Issued Date
+                    </label>
+                    <DatePicker
+                      date={issuedDate}
+                      onDateChange={setIssuedDate}
+                      placeholder="Select issued date"
                     />
                   </div>
-                  <div className="relative group">
-                    <IconCalendar
-                      className="absolute left-3 top-3 text-[var(--muted-foreground)] group-focus-within:text-[var(--primary-cta-60)] transition-colors"
-                      size={18}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Due Date"
-                      className="w-full bg-[var(--muted)]/30 border border-transparent focus:border-[var(--primary-cta-40)] rounded-lg py-3 pl-10 text-sm text-[var(--foreground)] outline-none transition-all"
-                      onFocus={(e) => (e.target.type = "date")}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      Due Date
+                    </label>
+                    <DatePicker
+                      date={dueDate}
+                      onDateChange={setDueDate}
+                      placeholder="Select due date"
                     />
                   </div>
                 </div>
@@ -119,6 +216,8 @@ export function CreateInvoiceModal({
                 <textarea
                   className="w-full bg-[var(--muted)]/30 rounded-lg border border-transparent focus:border-[var(--primary-cta-40)] p-3 text-sm outline-none resize-none h-24"
                   placeholder="e.g. Net 30. Thank you for your business."
+                  value={terms}
+                  onChange={(e) => setTerms(e.target.value)}
                 />
               </div>
             </div>
@@ -126,57 +225,113 @@ export function CreateInvoiceModal({
 
           {/* STEP 2: LINE ITEMS */}
           {step === 2 && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-              <div className="flex justify-between items-center mb-2">
+            <div className="space-y-5 animate-in slide-in-from-right-4 fade-in duration-300">
+              <div className="flex justify-between items-center">
                 <label className="text-xs uppercase tracking-widest text-[var(--muted-foreground)] font-semibold">
                   Services Rendered
                 </label>
-                <span className="text-[10px] text-[var(--muted-foreground)] bg-[var(--muted)] px-2 py-1 rounded">
+                <span className="text-[10px] text-[var(--muted-foreground)] bg-neutral-800 px-2 py-1 rounded">
                   USD
                 </span>
               </div>
 
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                {items.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className="grid grid-cols-12 gap-3 items-start group"
-                  >
-                    <div className="col-span-7">
-                      <input
-                        autoFocus={idx === items.length - 1}
-                        placeholder="Description"
-                        className="w-full bg-transparent border-b border-[var(--border)] focus:border-[var(--primary-cta-60)] py-2 text-sm outline-none transition-colors"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        placeholder="Qty"
-                        className="w-full bg-transparent border-b border-[var(--border)] focus:border-[var(--primary-cta-60)] py-2 text-sm text-right outline-none font-mono"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        placeholder="Price"
-                        className="w-full bg-transparent border-b border-[var(--border)] focus:border-[var(--primary-cta-60)] py-2 text-sm text-right outline-none font-mono"
-                      />
-                    </div>
-                    <div className="col-span-1 flex justify-center pt-2">
-                      <button
-                        onClick={() =>
-                          setItems(items.filter((i) => i.id !== item.id))
-                        }
-                        className="text-[var(--muted-foreground)] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <IconTrash size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              {/* Column Headers */}
+              <div className="grid grid-cols-12 gap-4 text-xs text-muted-foreground font-medium border-b border-neutral-800 pb-2">
+                <div className="col-span-5">Description</div>
+                <div className="col-span-2 text-center">Qty</div>
+                <div className="col-span-2 text-center">Price</div>
+                <div className="col-span-1"></div>
               </div>
 
+              {/* Line Items */}
+              <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                {items.map((item, idx) => {
+                  const lineTotal = item.qty * item.price;
+                  return (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-12 gap-4 items-center group"
+                    >
+                      <div className="col-span-5">
+                        <Input
+                          autoFocus={idx === items.length - 1}
+                          placeholder="Service description..."
+                          value={item.desc}
+                          onChange={(e) =>
+                            setItems(
+                              items.map((i) =>
+                                i.id === item.id
+                                  ? { ...i, desc: e.target.value }
+                                  : i,
+                              ),
+                            )
+                          }
+                          className="bg-neutral-900 border-neutral-800"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="1"
+                          value={item.qty || ""}
+                          onChange={(e) =>
+                            setItems(
+                              items.map((i) =>
+                                i.id === item.id
+                                  ? { ...i, qty: parseInt(e.target.value) || 1 }
+                                  : i,
+                              ),
+                            )
+                          }
+                          className="bg-neutral-900 border-neutral-800 text-center font-mono"
+                        />
+                      </div>
+                      <div className="col-span-4 relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                          $
+                        </span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={item.price || ""}
+                          onChange={(e) =>
+                            setItems(
+                              items.map((i) =>
+                                i.id === item.id
+                                  ? {
+                                      ...i,
+                                      price: parseFloat(e.target.value) || 0,
+                                    }
+                                  : i,
+                              ),
+                            )
+                          }
+                          className="bg-neutral-900 border-neutral-800 text-right font-mono pl-6"
+                        />
+                      </div>
+                      <div className="col-span-1 flex justify-center">
+                        <button
+                          onClick={() => {
+                            if (items.length > 1) {
+                              setItems(items.filter((i) => i.id !== item.id));
+                            }
+                          }}
+                          disabled={items.length === 1}
+                          className="text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-20 disabled:cursor-not-allowed"
+                          aria-label="Remove item"
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Item Button */}
               <button
                 onClick={() =>
                   setItems([
@@ -184,18 +339,23 @@ export function CreateInvoiceModal({
                     { id: Date.now(), desc: "", qty: 1, price: 0 },
                   ])
                 }
-                className="text-xs font-semibold text-[var(--primary-cta-40)] flex items-center gap-1 hover:underline mt-2"
+                className="text-xs font-semibold text-[var(--primary-cta-40)] flex items-center gap-1.5 hover:underline"
               >
-                <IconPlus size={14} /> Add Item
+                <IconPlus size={14} /> Add Line Item
               </button>
 
-              <div className="flex justify-end pt-6">
-                <div className="text-right">
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Estimated Total
+              {/* Total Section */}
+              <div className="flex justify-end pt-4 border-t border-neutral-800">
+                <div className="text-right space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                    Invoice Total
                   </p>
-                  <p className="text-2xl font-mono font-bold text-[var(--foreground)]">
-                    $0.00
+                  <p className="text-3xl font-mono font-bold text-foreground">
+                    $
+                    {total.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </p>
                 </div>
               </div>
@@ -204,37 +364,150 @@ export function CreateInvoiceModal({
 
           {/* STEP 3: REVIEW */}
           {step === 3 && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300 text-center py-8">
-              <div className="w-16 h-16 bg-[var(--primary-cta-60)]/20 rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--primary-cta-60)] border border-[var(--primary-cta-60)]">
-                <IconCheck size={32} stroke={3} />
-              </div>
-              <h3 className="text-xl font-semibold">Ready to Send?</h3>
-              <p className="text-[var(--muted-foreground)] text-sm max-w-xs mx-auto">
-                You are about to send Invoice <strong>#004</strong> to{" "}
-                <strong>Acme Corp</strong> for{" "}
-                <strong className="text-[var(--primary-cta-40)]">
-                  $12,450.00
-                </strong>
-                .
-              </p>
+            <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+              {txHash ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-green-500 border border-green-500">
+                    <IconCheck size={32} stroke={3} />
+                  </div>
+                  <h3 className="text-xl font-semibold">Invoice Created!</h3>
+                  <p className="text-muted-foreground text-sm mt-2 break-all max-w-xs mx-auto">
+                    Transaction: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Header */}
+                  <div className="text-center">
+                    <div className="w-14 h-14 bg-[var(--primary-cta-60)]/20 rounded-full flex items-center justify-center mx-auto mb-3 text-[var(--primary-cta-60)] border border-[var(--primary-cta-60)]">
+                      <IconCheck size={28} stroke={3} />
+                    </div>
+                    <h3 className="text-lg font-semibold">Review Invoice</h3>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      Please review the details before submitting
+                    </p>
+                  </div>
 
-              <div className="bg-[var(--muted)]/30 rounded-lg p-4 text-left text-xs text-[var(--muted-foreground)] max-w-sm mx-auto border border-[var(--border)]">
-                <div className="flex justify-between mb-2">
-                  <span>Issued</span> <span>Oct 24, 2023</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span>Due</span> <span>Nov 24, 2023</span>
-                </div>
-                <div className="flex justify-between font-semibold text-[var(--foreground)] border-t border-[var(--border)] pt-2 mt-2">
-                  <span>Total Due</span>
-                  <span>$12,450.00</span>
-                </div>
-              </div>
+                  {/* Invoice Details Card */}
+                  <div className="bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden">
+                    {/* Client & Dates Section */}
+                    <div className="p-4 border-b border-neutral-800">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                            Bill To
+                          </p>
+                          <p className="font-medium">
+                            {clientName || "Client Name"}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setStep(1)}
+                          className="text-xs text-[var(--primary-cta-40)] hover:underline"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Issued
+                          </p>
+                          <p>
+                            {issuedDate
+                              ? issuedDate.toLocaleDateString()
+                              : "Today"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Due</p>
+                          <p>
+                            {dueDate
+                              ? dueDate.toLocaleDateString()
+                              : "+30 days"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Line Items Section */}
+                    <div className="p-4 border-b border-neutral-800">
+                      <div className="flex justify-between items-center mb-3">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                          Line Items
+                        </p>
+                        <button
+                          onClick={() => setStep(2)}
+                          className="text-xs text-[var(--primary-cta-40)] hover:underline"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {items
+                          .filter((i) => i.desc.trim())
+                          .map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex justify-between text-sm"
+                            >
+                              <span className="text-muted-foreground">
+                                {item.desc}{" "}
+                                <span className="text-xs">(×{item.qty})</span>
+                              </span>
+                              <span className="font-mono">
+                                $
+                                {(item.qty * item.price).toLocaleString(
+                                  "en-US",
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        {items.filter((i) => i.desc.trim()).length === 0 && (
+                          <p className="text-sm text-muted-foreground italic">
+                            No items added
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Total Section */}
+                    <div className="p-4 bg-neutral-800/50">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Total Due</span>
+                        <span className="text-xl font-mono font-bold text-[var(--primary-cta-40)]">
+                          $
+                          {total.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Network Indicator */}
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    Creating on Arc Testnet
+                  </div>
+
+                  {/* Error Display */}
+                  {(submitError || error) && (
+                    <p className="text-red-500 text-sm text-center">
+                      {submitError || error}
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
 
-        {/* FOOTER: Navigation Actions */}
         <div className="flex items-center justify-between px-8 py-6 border-t border-[var(--border)] bg-[var(--muted)]/20">
           <Button
             variant="ghost"
@@ -249,16 +522,32 @@ export function CreateInvoiceModal({
             <Button
               variant="primary"
               onClick={nextStep}
-              className="shadow-none"
+              className="shadow-none rounded-full"
             >
               Next Step <IconArrowRight size={16} className="ml-2" />
             </Button>
           ) : (
             <Button
               variant="primary"
-              className="shadow-[0_0_20px_rgba(253,224,87,0.3)] px-8"
+              onClick={handleSubmit}
+              disabled={isLoading || !!txHash || isSwitchingChain}
+              className="shadow-[0_0_20px_rgba(253,224,87,0.3)] px-8 rounded-full"
             >
-              Confirm & Send
+              {isLoading ? (
+                <>
+                  <IconLoader2 size={16} className="mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : isSwitchingChain ? (
+                <>
+                  <IconLoader2 size={16} className="mr-2 animate-spin" />
+                  Switching Network...
+                </>
+              ) : txHash ? (
+                "Done!"
+              ) : (
+                "Confirm & Send"
+              )}
             </Button>
           )}
         </div>
