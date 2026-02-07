@@ -7,6 +7,13 @@ export const YELLOW_INVOICE_ABI = parseAbi([
   "event InvoiceCreated(uint256 indexed id, address indexed merchant, string clientName, uint256 amount)",
 ]);
 
+export const ERC20_ABI = parseAbi([
+  "function transfer(address to, uint256 amount) external returns (bool)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
+]);
+
 export const YELLOW_REGISTRAR_ABI = [
   {
     name: "register",

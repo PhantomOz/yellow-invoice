@@ -6,10 +6,8 @@ import {
   http,
   custom,
   encodeFunctionData,
-  parseEther,
-  toHex,
 } from "viem";
-import { base, baseSepolia, mainnet, sepolia } from "viem/chains";
+import { baseSepolia, sepolia } from "viem/chains";
 import { normalize } from "viem/ens";
 
 import { YELLOW_REGISTRAR_ABI, L2_REGISTRY_ABI } from "../constants/abi";

@@ -26,16 +26,21 @@ export interface Invoice {
   services: string;
 }
 
+// Create client outside the hook to prevent recreation on every render
+const publicClient = createPublicClient({
+  chain: arcTestnet,
+  transport: http(undefined, {
+    retryCount: 5,
+    retryDelay: 2000,
+  }),
+});
+
 export function useInvoiceContract() {
   const { wallets } = useWallets();
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const publicClient = createPublicClient({
-    chain: arcTestnet,
-    transport: http(),
-  });
 
   // Initialize wallet client from Privy
   useEffect(() => {
@@ -112,7 +117,7 @@ export function useInvoiceContract() {
         return null;
       }
     },
-    [walletClient, publicClient],
+    [walletClient],
   );
 
   // Get Invoice by ID
@@ -148,7 +153,7 @@ export function useInvoiceContract() {
         return null;
       }
     },
-    [publicClient],
+    [],
   );
 
   return {

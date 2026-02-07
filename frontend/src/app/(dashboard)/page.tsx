@@ -120,7 +120,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* GET PAID SECTION */}
       <section className="mb-16">
         <SectionHeader
           title="Get Paid"

@@ -15,8 +15,8 @@ export function Card({
   return (
     <div
       className={`
-        bg-[var(--card)] border border-[var(--border)] rounded-[2rem] p-5 
-        ${!noHover && "transition-all duration-300 hover:border-[var(--primary-cta-40)] hover:shadow-[0_0_20px_rgba(252,208,0,0.1)] group"}
+        bg-card border border-border rounded-4xl p-5 
+        ${!noHover && "transition-all duration-300 hover:border-cta-40 hover:shadow-[0_0_20px_rgba(252,208,0,0.1)] group"}
         ${className}
       `}
       {...props}
