@@ -1,21 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { createPublicClient, createWalletClient, custom, http, parseAbi, type WalletClient, type Address } from 'viem';
+import { sepolia } from 'viem/chains';
 
-// Circle Arc Testnet
-const arcTestnet = {
-    id: 5042002,
-    name: 'Arc Testnet',
-    network: 'arc-testnet',
-    nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 6 },
-    rpcUrls: {
-        default: { http: ['https://rpc.testnet.arc.network'] },
-        public: { http: ['https://rpc.testnet.arc.network'] },
-    },
-};
-
-// Contract Address (Deployed)
-const YELLOW_INVOICE_ADDRESS = '0xb2FD819e68B58D2509FDC3393fCFd5860dD28c52' as const;
+// Contract Address (Deployed on Sepolia)
+const YELLOW_INVOICE_ADDRESS = '0x84B3e3d994C1e928C017B03913cf27C70b25DE7D' as const;
 
 // Contract ABI (Minimal for read/write)
 const YELLOW_INVOICE_ABI = parseAbi([
@@ -44,7 +33,7 @@ export function useInvoiceContract() {
     const [error, setError] = useState<string | null>(null);
 
     const publicClient = createPublicClient({
-        chain: arcTestnet,
+        chain: sepolia,
         transport: http(),
     });
 
@@ -61,7 +50,7 @@ export function useInvoiceContract() {
                 const provider = await wallet.getEthereumProvider();
                 const client = createWalletClient({
                     account: wallet.address as `0x${string}`,
-                    chain: arcTestnet,
+                    chain: sepolia,
                     transport: custom(provider),
                 });
                 setWalletClient(client);
@@ -107,7 +96,7 @@ export function useInvoiceContract() {
                     data.services,
                 ],
                 account,
-                chain: arcTestnet,
+                chain: sepolia,
             });
 
             // Wait for confirmation
