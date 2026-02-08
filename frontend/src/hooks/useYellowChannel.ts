@@ -384,16 +384,22 @@ export function useYellowChannel(
                             setStatus('session_created');
                             console.log('[Yellow] App session ID:', newAppSessionId);
 
-                            // Check for invoice ID in application identifier
+                            // Check for invoice ID in application protocol fields
+                            // We encode invoiceId in the nonce: nonce = (invoiceId * 10^10) + timestamp
                             try {
                                 const appDef = sessionParams.definition || sessionParams.appDefinition;
-                                const appName = appDef?.application || sessionParams.application;
+                                const nonce = appDef?.nonce || sessionParams.nonce;
 
-                                if (appName && typeof appName === 'string' && appName.startsWith('yellow-invoice:')) {
-                                    const extractedId = appName.split(':')[1];
-                                    if (extractedId) {
-                                        console.log('[Yellow] Detected payment for invoice:', extractedId);
-                                        setLastPaidInvoiceId(extractedId);
+                                if (nonce && typeof nonce === 'number') {
+                                    // Check if nonce is large enough to contain invoice ID
+                                    // 10^10 is our multiplier
+                                    const multiplier = 10000000000;
+                                    if (nonce > multiplier) {
+                                        const extractedId = Math.floor(nonce / multiplier).toString();
+                                        if (extractedId && extractedId !== '0') {
+                                            console.log('[Yellow] Detected payment for invoice (via nonce):', extractedId);
+                                            setLastPaidInvoiceId(extractedId);
+                                        }
                                     }
                                 }
                             } catch (err) {
@@ -408,6 +414,9 @@ export function useYellowChannel(
 
                     case RPCMethod.Transfer:
                         console.log('[Yellow] Transfer complete:', message.params);
+
+
+
                         setStatus('payment_complete');
                         break;
 
@@ -567,18 +576,29 @@ export function useYellowChannel(
             const checksummedAddress = getAddress(address);
             const checksummedMerchant = getAddress(merchantAddress);
 
-            // encode invoiceId in application identifier if provided
-            const appIdentifier = invoiceId ? `yellow-invoice:${invoiceId}` : 'yellow-invoice';
+            // encode invoiceId in nonce to avoid "Application mismatch" with session key
+            // Session keys are signed for "yellow-invoice" only.
+            // We use 10^10 multiplier to shift invoiceId to high bits of safe integer
+            let nonce = Date.now();
+            if (invoiceId) {
+                const idNum = parseInt(invoiceId);
+                if (!isNaN(idNum)) {
+                    // invoiceId * 10^10 + seconds (to save space)
+                    const timestamp = Math.floor(Date.now() / 1000);
+                    nonce = (idNum * 10000000000) + timestamp;
+                    console.log('[Yellow] Encoded invoice ID into nonce:', nonce);
+                }
+            }
 
             // Define the application session parameters
             const appDefinition = {
                 protocol: RPCProtocolVersion.NitroRPC_0_2,
-                application: appIdentifier,
+                application: 'yellow-invoice', // Must match session key scope!
                 participants: [checksummedAddress, checksummedMerchant],
                 weights: [100, 0],  // Payer has control
                 quorum: 100,
                 challenge: 0,
-                nonce: Date.now(),
+                nonce: nonce,
             };
 
             // Define allocations - payer starts with funds, merchant starts with 0
