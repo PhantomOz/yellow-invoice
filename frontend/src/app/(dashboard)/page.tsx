@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
@@ -14,6 +14,8 @@ import {
   IconFileInvoice,
   IconArrowUpRight,
   IconReceipt,
+  IconWallet,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { useInvoiceModal } from "@/components/invoicing/InvoiceModalContext";
 import { useYellowEns } from "@/hooks/useEns";
@@ -22,9 +24,21 @@ import LoginButton from "@/components/auth/login-button";
 import { useYellowChannel } from "@/hooks/useYellowChannel";
 
 import { useUserInvoices } from "@/hooks/useUserInvoices";
-import { type Address } from "viem";
+import { type Address, createPublicClient, http, formatUnits } from "viem";
 import { createWalletClient, custom } from "viem";
-import { sepolia } from "viem/chains";
+import { sepolia, baseSepolia } from "viem/chains";
+
+// ytest.usd token address and ABI for balance check
+const YTEST_USD_TOKEN = '0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb' as const;
+const ERC20_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
 
 export default function Home() {
   const { openModal } = useInvoiceModal();
@@ -90,6 +104,92 @@ export default function Home() {
       console.log('[Dashboard] Ledger Balances:', ledgerBalances);
     }
   }, [ledgerBalances]);
+
+  // Wallet balance state
+  const [walletBalance, setWalletBalance] = useState<string>('0');
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+
+  // Fetch wallet balance for ytest.usd token
+  const fetchWalletBalance = useCallback(async () => {
+    if (!walletAddress) return;
+
+    setIsLoadingBalance(true);
+    try {
+      const publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: http(),
+      });
+
+      const balance = await publicClient.readContract({
+        address: YTEST_USD_TOKEN,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [walletAddress],
+      });
+
+      // ytest.usd has 6 decimals
+      const formatted = formatUnits(balance, 6);
+      setWalletBalance(formatted);
+    } catch (err) {
+      console.error('[Dashboard] Error fetching wallet balance:', err);
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  }, [walletAddress]);
+
+  // Fetch wallet balance when wallet is connected
+  useEffect(() => {
+    if (walletAddress) {
+      fetchWalletBalance();
+    }
+  }, [walletAddress, fetchWalletBalance]);
+
+  // Format ledger balance (raw value is in 6 decimal units)
+  const formattedLedgerBalance = useMemo(() => {
+    const ytestBalance = ledgerBalances.find(b => b.asset.toLowerCase() === 'ytest.usd');
+    if (!ytestBalance) return '0.00';
+    const raw = parseFloat(ytestBalance.amount);
+    // If value is very large, it's in raw units - divide by 10^6
+    if (raw > 1000000) {
+      return (raw / 1_000_000).toFixed(2);
+    }
+    return parseFloat(ytestBalance.amount).toFixed(2);
+  }, [ledgerBalances]);
+
+  // Calculate top clients from real invoice data
+  const topClients = useMemo(() => {
+    // Group invoices by client name and sum amounts
+    const clientMap = new Map<string, { name: string; total: number; count: number }>();
+
+    invoices.forEach((invoice) => {
+      // Only count paid invoices for "Top Clients who paid"
+      if (invoice.status === '1' && invoice.clientName) {
+        const clientKey = invoice.clientName.toLowerCase();
+        const amount = Number(invoice.amount) / 1_000_000;
+
+        if (clientMap.has(clientKey)) {
+          const existing = clientMap.get(clientKey)!;
+          existing.total += amount;
+          existing.count += 1;
+        } else {
+          clientMap.set(clientKey, { name: invoice.clientName, total: amount, count: 1 });
+        }
+      }
+    });
+
+    // Convert to array and sort by total amount
+    const sortedClients = Array.from(clientMap.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 4) // Top 4 clients
+      .map((client) => ({
+        name: client.name,
+        amount: client.total.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
+        initials: client.name.slice(0, 2).toUpperCase(),
+        count: client.count,
+      }));
+
+    return sortedClients;
+  }, [invoices]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -179,6 +279,33 @@ export default function Home() {
         </div>
       </header>
 
+      {/* BALANCE CARD */}
+      {walletAddress && (
+        <div className="mb-8 p-6 bg-[var(--card)] border border-white/5 rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <IconWallet size={20} className="text-[var(--primary-cta-40)]" />
+              <span className="text-sm font-medium">Your Balance</span>
+            </div>
+            <button
+              onClick={() => getLedgerBalances()}
+              className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-white transition-colors"
+            >
+              <IconRefresh size={14} />
+              Refresh
+            </button>
+          </div>
+          <div className="p-4 bg-white/5 rounded-xl">
+            <div className="text-xs text-[var(--muted-foreground)] mb-1">Ledger Balance</div>
+            <div className="text-2xl font-bold text-[var(--primary-cta-40)]">
+              {formattedLedgerBalance}
+              <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">ytest.usd</span>
+            </div>
+            <div className="text-[10px] text-[var(--muted-foreground)] mt-1">Yellow Network ledger</div>
+          </div>
+        </div>
+      )}
+
       <section className="mb-16">
         <SectionHeader
           title="Get Paid"
@@ -233,35 +360,36 @@ export default function Home() {
 
           <StatCard
             title="Your Top Clients"
-            subtitle="Last 3 months"
+            subtitle="By paid invoices"
             icon={<IconHandStop size={20} />}
           >
             <div className="space-y-1">
-              {[
-                { name: "Acme Corp", amount: "$12,450.00", initials: "AC" },
-                { name: "Globex Inc", amount: "$8,200.00", initials: "GI" },
-                {
-                  name: "Soylent Corp",
-                  amount: "$5,100.00",
-                  initials: "SC",
-                },
-                { name: "Initech", amount: "$3,300.00", initials: "IN" },
-              ].map((client) => (
-                <div
-                  key={client.name}
-                  className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors -mx-2"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-[10px] font-medium text-[var(--muted-foreground)]">
-                      {client.initials}
+              {topClients.length > 0 ? (
+                topClients.map((client) => (
+                  <div
+                    key={client.name}
+                    className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors -mx-2"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-[10px] font-medium text-[var(--muted-foreground)]">
+                        {client.initials}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{client.name}</span>
+                        <span className="text-xs text-[var(--muted-foreground)]">{client.count} invoice{client.count > 1 ? 's' : ''}</span>
+                      </div>
                     </div>
-                    <span className="text-sm font-medium">{client.name}</span>
+                    <span className="text-sm font-mono text-[var(--muted-foreground)]">
+                      {client.amount}
+                    </span>
                   </div>
-                  <span className="text-sm font-mono text-[var(--muted-foreground)]">
-                    {client.amount}
-                  </span>
+                ))
+              ) : (
+                <div className="h-24 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs">
+                  <IconHandStop className="mb-2 opacity-20" size={24} />
+                  <p className="opacity-50">No paid invoices yet</p>
                 </div>
-              ))}
+              )}
             </div>
           </StatCard>
         </div>
