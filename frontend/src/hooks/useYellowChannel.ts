@@ -12,6 +12,7 @@ import {
     createCreateChannelMessage,
     createCloseChannelMessage,
     createGetChannelsMessage,
+    createGetLedgerBalancesMessage,
     createAppSessionMessage,
     createCloseAppSessionMessage,
     createTransferMessage,
@@ -24,6 +25,7 @@ import {
     StateIntent,
     WalletStateSigner,
     BalanceUpdateResponse,
+    GetLedgerBalancesResponse,
 } from '@erc7824/nitrolite';
 
 // Yellow ClearNode Sandbox
@@ -65,6 +67,8 @@ interface UseYellowChannelResult {
     getChannels: () => Promise<void>;
     createPaymentSession: (merchantAddress: Address, amount: string) => Promise<void>;
     sendPayment: (merchantAddress: Address, amount: string) => Promise<void>;
+    getLedgerBalances: () => Promise<void>;
+    ledgerBalances: { asset: string; amount: string }[];
     disconnect: () => void;
 }
 
@@ -91,6 +95,7 @@ export function useYellowChannel(
     const [channels, setChannels] = useState<ChannelInfo[]>([]);
     const [existingChannelId, setExistingChannelId] = useState<string | null>(null);
     const [appSessionId, setAppSessionId] = useState<string | null>(null);
+    const [ledgerBalances, setLedgerBalances] = useState<{ asset: string; amount: string }[]>([]);
 
     // Refs for persistent values
     const clientRef = useRef<Client | null>(null);
@@ -293,6 +298,15 @@ export function useYellowChannel(
                         console.log('Updating balances in real-time:', balancesMap);
                         break;
 
+                    case RPCMethod.GetLedgerBalances:
+                        console.log('[Yellow] Ledger balances received:', message.params);
+                        const ledgerResponse = (message as GetLedgerBalancesResponse).params.ledgerBalances || [];
+                        setLedgerBalances(ledgerResponse.map((b: any) => ({
+                            asset: b.asset,
+                            amount: b.amount,
+                        })));
+                        break;
+
                     case RPCMethod.CreateAppSession:
                         console.log('[Yellow] App session created:', message.params);
                         const sessionParams = message.params as any;
@@ -416,6 +430,24 @@ export function useYellowChannel(
             setStatus('error');
         }
     }, [address]);
+
+    // Get ledger balances
+    const getLedgerBalances = useCallback(async () => {
+        if (!clientRef.current || !sessionSignerRef.current) {
+            setError('Not connected');
+            return;
+        }
+
+        try {
+            console.log('[Yellow] Getting ledger balances...');
+            const message = await createGetLedgerBalancesMessage(sessionSignerRef.current);
+            clientRef.current.sendMessage(message);
+            // Response handled in message listener
+        } catch (e: any) {
+            console.error('[Yellow] Error getting ledger balances:', e);
+            setError(e.message || 'Failed to get ledger balances');
+        }
+    }, []);
 
     // Disconnect
     const disconnect = useCallback(() => {
@@ -552,6 +584,8 @@ export function useYellowChannel(
         createChannel,
         closeChannel,
         getChannels,
+        getLedgerBalances,
+        ledgerBalances,
         createPaymentSession,
         sendPayment,
         disconnect,
