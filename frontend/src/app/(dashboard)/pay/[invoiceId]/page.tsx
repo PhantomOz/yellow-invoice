@@ -52,6 +52,12 @@ export default function PaymentPage() {
         closeChannel,
         getChannels,
         sendPayment,
+        selectedChainId,
+        setSelectedChainId,
+        supportedChains,
+        selectedAsset,
+        setSelectedAsset,
+        supportedAssets,
         disconnect: disconnectYellow,
     } = useYellowChannel(walletClient, address, invoice.amount);
 
@@ -139,10 +145,43 @@ export default function PaymentPage() {
                     <span>Yellow Network State Channels</span>
                 </div>
 
-                {/* Network Info */}
-                <div className="bg-white/5 rounded-lg p-3 mb-4 text-center">
-                    <div className="text-xs text-[var(--muted-foreground)]">Settlement</div>
-                    <div className="font-medium">Sepolia (via Yellow ClearNode)</div>
+                {/* Chain & Asset Selectors */}
+                <div className="bg-white/5 rounded-lg p-3 mb-4">
+                    <div className="grid grid-cols-2 gap-3">
+                        {/* Chain Selector */}
+                        <div>
+                            <div className="text-xs text-[var(--muted-foreground)] mb-2 text-center">Chain</div>
+                            <select
+                                value={selectedChainId}
+                                onChange={(e) => setSelectedChainId(Number(e.target.value) as typeof selectedChainId)}
+                                className="w-full bg-[var(--background)] border border-white/10 rounded-lg px-3 py-2 text-sm font-medium text-center appearance-none cursor-pointer hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                                disabled={isProcessing}
+                            >
+                                {supportedChains.map((chain) => (
+                                    <option key={chain.id} value={chain.id}>
+                                        {chain.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Asset Selector */}
+                        <div>
+                            <div className="text-xs text-[var(--muted-foreground)] mb-2 text-center">Asset</div>
+                            <select
+                                value={selectedAsset}
+                                onChange={(e) => setSelectedAsset(e.target.value as typeof selectedAsset)}
+                                className="w-full bg-[var(--background)] border border-white/10 rounded-lg px-3 py-2 text-sm font-medium text-center appearance-none cursor-pointer hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                                disabled={isProcessing}
+                            >
+                                {supportedAssets.map((asset) => (
+                                    <option key={asset.address} value={asset.address}>
+                                        {asset.symbol}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-2 text-center">via Yellow ClearNode</div>
                 </div>
 
                 {/* Status Badge */}

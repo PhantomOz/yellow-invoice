@@ -34,6 +34,23 @@ const WS_URL = 'wss://clearnet-sandbox.yellow.com/ws';
 // ytest.usd is the only token supported on testnet
 const YTEST_USD_TOKEN = '0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb' as const;
 
+// Supported chains for Yellow Network unified balance
+export type SupportedChainId = typeof sepolia.id | typeof baseSepolia.id | typeof polygonAmoy.id;
+
+export const SUPPORTED_CHAINS = [
+    { id: sepolia.id, name: 'Sepolia', chain: sepolia },
+    { id: baseSepolia.id, name: 'Base Sepolia', chain: baseSepolia },
+    { id: polygonAmoy.id, name: 'Polygon Amoy', chain: polygonAmoy },
+] as const;
+
+// Supported assets on Yellow Network testnet
+export const SUPPORTED_ASSETS = [
+    { address: '0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb' as `0x${string}`, symbol: 'ytest.usd', name: 'Yellow Test USD' },
+    { address: '0x0000000000000000000000000000000000000000' as `0x${string}`, symbol: 'ETH', name: 'Ethereum' },
+] as const;
+
+export type SupportedAssetAddress = typeof SUPPORTED_ASSETS[number]['address'];
+
 export type YellowStatus =
     | 'idle'
     | 'connecting'
@@ -69,6 +86,12 @@ interface UseYellowChannelResult {
     sendPayment: (merchantAddress: Address, amount: string) => Promise<void>;
     getLedgerBalances: () => Promise<void>;
     ledgerBalances: { asset: string; amount: string }[];
+    selectedChainId: SupportedChainId;
+    setSelectedChainId: (chainId: SupportedChainId) => void;
+    supportedChains: typeof SUPPORTED_CHAINS;
+    selectedAsset: SupportedAssetAddress;
+    setSelectedAsset: (asset: SupportedAssetAddress) => void;
+    supportedAssets: typeof SUPPORTED_ASSETS;
     disconnect: () => void;
 }
 
@@ -96,6 +119,8 @@ export function useYellowChannel(
     const [existingChannelId, setExistingChannelId] = useState<string | null>(null);
     const [appSessionId, setAppSessionId] = useState<string | null>(null);
     const [ledgerBalances, setLedgerBalances] = useState<{ asset: string; amount: string }[]>([]);
+    const [selectedChainId, setSelectedChainId] = useState<SupportedChainId>(sepolia.id);
+    const [selectedAsset, setSelectedAsset] = useState<SupportedAssetAddress>(SUPPORTED_ASSETS[0].address);
 
     // Refs for persistent values
     const clientRef = useRef<Client | null>(null);
@@ -127,6 +152,13 @@ export function useYellowChannel(
             default:
                 throw new Error('Unsupported chain');
         }
+    }, []);
+
+    // Get chain object by ID
+    const getChainById = useCallback((chainId: SupportedChainId) => {
+        const found = SUPPORTED_CHAINS.find(c => c.id === chainId);
+        if (!found) throw new Error('Unsupported chain');
+        return found.chain;
     }, []);
 
     // Connect and authenticate to Yellow Network
@@ -248,9 +280,12 @@ export function useYellowChannel(
                     case RPCMethod.CreateChannel:
                         console.log('[Yellow] Channel created:', message.params);
 
+                        // Get the chain object for the selected chain
+                        const selectedChain = getChainById(selectedChainId);
+
                         // Submit to blockchain
                         const publicClient = createPublicClient({
-                            chain: sepolia,
+                            chain: selectedChain,
                             transport: http(),
                         });
 
@@ -258,8 +293,8 @@ export function useYellowChannel(
                             walletClient: walletClient as any,
                             publicClient: publicClient as any,
                             stateSigner: new WalletStateSigner(walletClient as any),
-                            addresses: getContractAddresses(sepolia.id),
-                            chainId: sepolia.id,
+                            addresses: getContractAddresses(selectedChainId),
+                            chainId: selectedChainId,
                             challengeDuration: BigInt(3600),
                         });
 
@@ -370,7 +405,7 @@ export function useYellowChannel(
         }
     }, [walletClient, address, generateSessionKey, getContractAddresses]);
 
-    // Create a new channel
+    // Create a new channel on selected chain with selected asset
     const createChannel = useCallback(async () => {
         if (!clientRef.current || !sessionSignerRef.current) {
             setError('Not connected');
@@ -378,17 +413,19 @@ export function useYellowChannel(
         }
 
         setStatus('creating_channel');
+        const assetInfo = SUPPORTED_ASSETS.find(a => a.address === selectedAsset);
+        console.log(`[Yellow] Creating channel on chain ${selectedChainId} with asset ${assetInfo?.symbol || selectedAsset}...`);
 
         const createChannelMessage = await createCreateChannelMessage(
             sessionSignerRef.current,
             {
-                chain_id: sepolia.id,
-                token: YTEST_USD_TOKEN,
+                chain_id: selectedChainId,
+                token: selectedAsset,
             }
         );
 
         clientRef.current.sendMessage(createChannelMessage);
-    }, []);
+    }, [selectedChainId, selectedAsset]);
 
     // Get existing channels
     const getChannels = useCallback(async () => {
@@ -586,6 +623,12 @@ export function useYellowChannel(
         getChannels,
         getLedgerBalances,
         ledgerBalances,
+        selectedChainId,
+        setSelectedChainId,
+        supportedChains: SUPPORTED_CHAINS,
+        selectedAsset,
+        setSelectedAsset,
+        supportedAssets: SUPPORTED_ASSETS,
         createPaymentSession,
         sendPayment,
         disconnect,
