@@ -49,7 +49,10 @@ export default function Home() {
   const [walletClient, setWalletClient] = useState<any>(null);
 
   const walletAddress = user?.wallet?.address as Address | undefined;
-  const { invoices, isLoading } = useUserInvoices(walletAddress || null);
+  // Fetch invoices where user is the merchant (to get paid)
+  const { invoices: merchantInvoices, isLoading: isLoadingMerchant } = useUserInvoices(walletAddress || null, 'merchant');
+  // Fetch invoices where user is the payer (to pay)
+  const { invoices: payerInvoices, isLoading: isLoadingPayer } = useUserInvoices(walletAddress || null, 'payer');
 
   // Create wallet client when wallet is available
   useEffect(() => {
@@ -150,10 +153,11 @@ export default function Home() {
     if (!ytestBalance) return '0.00';
     const raw = parseFloat(ytestBalance.amount);
     // If value is very large, it's in raw units - divide by 10^6
+    let value = raw;
     if (raw > 1000000) {
-      return (raw / 1_000_000).toFixed(2);
+      value = raw / 1_000_000;
     }
-    return parseFloat(ytestBalance.amount).toFixed(2);
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [ledgerBalances]);
 
   // Calculate top clients from real invoice data
@@ -161,7 +165,7 @@ export default function Home() {
     // Group invoices by client name and sum amounts
     const clientMap = new Map<string, { name: string; total: number; count: number }>();
 
-    invoices.forEach((invoice) => {
+    merchantInvoices.forEach((invoice) => {
       // Only count paid invoices for "Top Clients who paid"
       if (invoice.status === '1' && invoice.clientName) {
         const clientKey = invoice.clientName.toLowerCase();
@@ -189,9 +193,10 @@ export default function Home() {
       }));
 
     return sortedClients;
-  }, [invoices]);
+  }, [merchantInvoices]);
 
-  const stats = useMemo(() => {
+  // Calculate Merchant Stats (Get Paid)
+  const merchantStats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -200,7 +205,7 @@ export default function Home() {
     let toReceive = 0;
     let unpaidCount = 0;
 
-    invoices.forEach((invoice) => {
+    merchantInvoices.forEach((invoice) => {
       const amount = Number(invoice.amount) / 1_000_000;
       const createdDate = new Date(Number(invoice.createdAt) * 1000);
       const isCurrentMonth =
@@ -239,7 +244,101 @@ export default function Home() {
       }),
       unpaidCount,
     };
-  }, [invoices]);
+  }, [merchantInvoices]);
+
+  // Calculate Payer Stats (Pay)
+  const payerStats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let paid = 0;
+    let toPay = 0;
+    let billsToPayCount = 0;
+
+    payerInvoices.forEach((invoice) => {
+      const amount = Number(invoice.amount) / 1_000_000;
+      const createdDate = new Date(Number(invoice.createdAt) * 1000);
+      const isCurrentMonth =
+        createdDate.getMonth() === currentMonth &&
+        createdDate.getFullYear() === currentYear;
+
+      // Status 1 is Paid
+      if (invoice.status === "1") {
+        const settledDate = invoice.settledAt
+          ? new Date(Number(invoice.settledAt) * 1000)
+          : createdDate;
+
+        if (
+          settledDate.getMonth() === currentMonth &&
+          settledDate.getFullYear() === currentYear
+        ) {
+          paid += amount;
+        }
+      } else {
+        // Status != 1 is Pending/Overdue
+        if (isCurrentMonth) {
+          toPay += amount;
+        }
+        billsToPayCount++;
+      }
+    });
+
+    return {
+      paid: paid.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+      }),
+      toPay: toPay.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+      }),
+      billsToPayCount,
+    };
+  }, [payerInvoices]);
+
+  // Calculate Monthly Bar Chart Data
+  const getMonthlyData = (invoices: any[], type: 'inflows' | 'outflows') => {
+    const monthlyTotals = new Array(7).fill(0);
+    const labels = [];
+    const now = new Date();
+
+    // Generate last 7 months labels
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      labels.push(d.toLocaleString("en-US", { month: "short" }));
+    }
+
+    invoices.forEach((invoice) => {
+      // Only count paid invoices for charts
+      if (invoice.status === "1") {
+        const amount = Number(invoice.amount) / 1_000_000;
+        const date = invoice.settledAt
+          ? new Date(Number(invoice.settledAt) * 1000)
+          : new Date(Number(invoice.createdAt) * 1000);
+
+        // Calculate months difference from now
+        const monthsDiff = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+
+        if (monthsDiff >= 0 && monthsDiff <= 6) {
+          // Index 6 is current month, 0 is 6 months ago
+          const index = 6 - monthsDiff;
+          monthlyTotals[index] += amount;
+        }
+      }
+    });
+
+    const maxVal = Math.max(...monthlyTotals, 100); // Minimum scale of 100
+
+    return {
+      totals: monthlyTotals,
+      labels,
+      maxVal
+    };
+  };
+
+  const inflowsData = useMemo(() => getMonthlyData(merchantInvoices, 'inflows'), [merchantInvoices]);
+  const outflowsData = useMemo(() => getMonthlyData(payerInvoices, 'outflows'), [payerInvoices]);
 
   // Fetch ENS name for the wallet
   useEffect(() => {
@@ -321,17 +420,17 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
             <SummaryCard
               label="Received this month"
-              value={stats.received}
+              value={merchantStats.received}
               icon={IconArrowDownLeft}
             />
             <SummaryCard
               label="To receive this month"
-              value={stats.toReceive}
+              value={merchantStats.toReceive}
               icon={IconClock}
             />
             <SummaryCard
               label="Invoices to get paid"
-              value={stats.unpaidCount.toString()}
+              value={merchantStats.unpaidCount.toString()}
               icon={IconFileInvoice}
             />
           </div>
@@ -343,19 +442,43 @@ export default function Home() {
             subtitle="Cash Inflows"
             className="col-span-1 lg:col-span-2"
           >
-            <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
-              <IconChartBar className="mb-2 opacity-20" size={32} />
-              <p className="opacity-50">No data available</p>
-            </div>
-            <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
-              <p className="mb-2">Start using the platform for activity.</p>
-              <button
-                className="text-[var(--primary-cta-40)] hover:text-[var(--primary-cta-60)] hover:underline font-medium"
-                onClick={openModal}
-              >
-                Create a New Invoice
-              </button>
-            </div>
+            {merchantInvoices.some(i => i.status === '1') ? (
+              <div className="h-48 flex items-end justify-between gap-2 px-4 py-4">
+                {inflowsData.totals.map((total, i) => (
+                  <div key={i} className="flex flex-col items-center gap-2 group w-full">
+                    <div className="relative w-full flex justify-center h-32 items-end">
+                      <div
+                        className="w-full max-w-[40px] bg-[var(--primary-cta-40)] rounded-t-sm transition-all duration-300 group-hover:bg-[var(--primary-cta-60)]"
+                        style={{ height: `${(total / inflowsData.maxVal) * 100}%`, minHeight: total > 0 ? '4px' : '0' }}
+                      >
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/80 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                          ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase">
+                      {inflowsData.labels[i]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
+                <IconChartBar className="mb-2 opacity-20" size={32} />
+                <p className="opacity-50">No data available</p>
+              </div>
+            )}
+            {!merchantInvoices.some(i => i.status === '1') && (
+              <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
+                <p className="mb-2">Start using the platform for activity.</p>
+                <button
+                  className="text-[var(--primary-cta-40)] hover:text-[var(--primary-cta-60)] hover:underline font-medium"
+                  onClick={openModal}
+                >
+                  Create a New Invoice
+                </button>
+              </div>
+            )}
           </StatCard>
 
           <StatCard
@@ -401,23 +524,25 @@ export default function Home() {
           title="Pay"
           description="Invite your partners to invoice you and save time when paying them in crypto."
           action={
-            <ActionButton>
-              <IconPlus size={16} /> Invite Your Vendors
-            </ActionButton>
+            <div onClick={openModal}>
+              <ActionButton>
+                <IconPlus size={16} /> Invite Your Vendors
+              </ActionButton>
+            </div>
           }
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
             <SummaryCard
               label="Paid this month"
-              value="$0.00"
+              value={payerStats.paid}
               icon={IconArrowUpRight}
             />
             <SummaryCard
               label="To pay this month"
-              value="$0.00"
+              value={payerStats.toPay}
               icon={IconClock}
             />
-            <SummaryCard label="Bills to pay" value="0" icon={IconReceipt} />
+            <SummaryCard label="Bills to pay" value={payerStats.billsToPayCount.toString()} icon={IconReceipt} />
           </div>
         </SectionHeader>
 
@@ -427,16 +552,40 @@ export default function Home() {
             subtitle="Cash Outflows"
             className="col-span-1 lg:col-span-2"
           >
-            <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
-              <IconChartBar className="mb-2 opacity-20" size={32} />
-              <p className="opacity-50">No data available</p>
-            </div>
-            <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
-              <p className="mb-2">Start using the platform for activity.</p>
-              <button className="text-[var(--primary-cta-40)] hover:text-[var(--primary-cta-60)] hover:underline font-medium">
-                Invite Vendors
-              </button>
-            </div>
+            {payerInvoices.some(i => i.status === '1') ? (
+              <div className="h-48 flex items-end justify-between gap-2 px-4 py-4">
+                {outflowsData.totals.map((total, i) => (
+                  <div key={i} className="flex flex-col items-center gap-2 group w-full">
+                    <div className="relative w-full flex justify-center h-32 items-end">
+                      <div
+                        className="w-full max-w-[40px] bg-[var(--primary-cta-40)] rounded-t-sm transition-all duration-300 group-hover:bg-[var(--primary-cta-60)]"
+                        style={{ height: `${(total / outflowsData.maxVal) * 100}%`, minHeight: total > 0 ? '4px' : '0' }}
+                      >
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/80 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                          ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase">
+                      {outflowsData.labels[i]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
+                <IconChartBar className="mb-2 opacity-20" size={32} />
+                <p className="opacity-50">No data available</p>
+              </div>
+            )}
+            {!payerInvoices.some(i => i.status === '1') && (
+              <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
+                <p className="mb-2">Start using the platform for activity.</p>
+                <div className="text-[var(--primary-cta-40)] font-medium">
+                  Invite Vendors
+                </div>
+              </div>
+            )}
           </StatCard>
 
           <StatCard

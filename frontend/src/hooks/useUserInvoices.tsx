@@ -15,13 +15,17 @@ export interface Invoice {
   merchant?: string;
 }
 
-export function useUserInvoices(userAddress: Address | null) {
+export function useUserInvoices(userAddress: Address | null, role: 'merchant' | 'payer' = 'merchant') {
   const queryFn = async () => {
     if (!userAddress) return [];
 
+    const whereClause = role === 'merchant'
+      ? `merchant: $address`
+      : `payer: $address`;
+
     const query = `
-      query GetInvoicesByMerchant($merchant: Bytes!) {
-        invoices(where: { merchant: $merchant }, orderBy: createdAt, orderDirection: desc) {
+      query GetInvoices($address: Bytes!) {
+        invoices(where: { ${whereClause} }, orderBy: createdAt, orderDirection: desc) {
           id
           internal_id
           clientName
@@ -43,7 +47,7 @@ export function useUserInvoices(userAddress: Address | null) {
       body: JSON.stringify({
         query,
         variables: {
-          merchant: userAddress,
+          address: userAddress,
         },
       }),
     });
@@ -66,7 +70,7 @@ export function useUserInvoices(userAddress: Address | null) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["userInvoices", userAddress],
+    queryKey: ["userInvoices", userAddress, role],
     queryFn,
     enabled: !!userAddress,
   });
