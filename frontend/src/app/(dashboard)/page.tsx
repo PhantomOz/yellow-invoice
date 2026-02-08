@@ -24,6 +24,7 @@ import LoginButton from "@/components/auth/login-button";
 import { useYellowChannel } from "@/hooks/useYellowChannel";
 
 import { useUserInvoices } from "@/hooks/useUserInvoices";
+import { useInvoiceContract } from "@/hooks/useInvoiceContract";
 import { type Address, createPublicClient, http, formatUnits } from "viem";
 import { createWalletClient, custom } from "viem";
 import { sepolia, baseSepolia } from "viem/chains";
@@ -83,6 +84,7 @@ export default function Home() {
     connect: connectYellow,
     ledgerBalances,
     getLedgerBalances,
+    lastPaidInvoiceId,
   } = useYellowChannel(walletClient, walletAddress, '0');
 
   // Auto-connect to Yellow Network when wallet client is ready
@@ -101,12 +103,29 @@ export default function Home() {
     }
   }, [yellowStatus, getLedgerBalances]);
 
-  // Log ledger balances when they update
   useEffect(() => {
     if (ledgerBalances.length > 0) {
       console.log('[Dashboard] Ledger Balances:', ledgerBalances);
     }
   }, [ledgerBalances]);
+
+  // Hook for contract interaction
+  const { markAsPaid } = useInvoiceContract();
+
+  // Auto-mark invoice as paid when Yellow Network detects payment
+  useEffect(() => {
+    if (lastPaidInvoiceId) {
+      console.log('[Dashboard] Auto-marking invoice as paid:', lastPaidInvoiceId);
+      // Prompt user to sign the transaction to update status on-chain
+      markAsPaid(Number(lastPaidInvoiceId)).then((res) => {
+        if (res) {
+          console.log('[Dashboard] Invoice marked as paid automatically!', res.hash);
+          // Ideally refresh invoices list here
+          window.location.reload(); // Simple refresh to show new status
+        }
+      });
+    }
+  }, [lastPaidInvoiceId, markAsPaid]);
 
   // Wallet balance state
   const [walletBalance, setWalletBalance] = useState<string>('0');

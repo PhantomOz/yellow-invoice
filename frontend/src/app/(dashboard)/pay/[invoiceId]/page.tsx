@@ -64,6 +64,7 @@ export default function PaymentPage() {
         ledgerBalances,
         getLedgerBalances,
         depositToLedger,
+        createPaymentSession,
         disconnect: disconnectYellow,
     } = useYellowChannel(walletClient, address, invoice.amount);
 
@@ -203,10 +204,12 @@ export default function PaymentPage() {
     const isPaid = yellowStatus === 'payment_complete' || paymentComplete;
 
     // Handle payment - direct transfer (no app session needed)
+    // Handle payment - using App Session to include invoice ID metadata
     const handlePay = async () => {
         try {
-            console.log('[Pay] Sending direct transfer payment...');
-            await sendPayment(invoice.recipient, invoice.amount);
+            console.log('[Pay] Creating payment session with invoice ID...');
+            const id = Array.isArray(invoice.id) ? invoice.id[0] : invoice.id;
+            await createPaymentSession(invoice.recipient, invoice.amount, id);
         } catch (e) {
             console.error('[Pay] Error:', e);
         }

@@ -1,17 +1,19 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { createPublicClient, createWalletClient, custom, http, parseAbi, type WalletClient, type Address } from 'viem';
-import { sepolia } from 'viem/chains';
+import { baseSepolia } from 'viem/chains';
 
-// Contract Address (Deployed on Sepolia)
-const YELLOW_INVOICE_ADDRESS = '0x84B3e3d994C1e928C017B03913cf27C70b25DE7D' as const;
+// Contract Address (Deployed on Base Sepolia)
+const YELLOW_INVOICE_ADDRESS = '0x4d04160633223533db789aab6610f54028295956' as const;
 
 // Contract ABI (Minimal for read/write)
 const YELLOW_INVOICE_ABI = parseAbi([
     'function createInvoice(uint256 amount, string clientName, uint256 issuedDate, uint256 dueDate, string terms, string services) external returns (uint256)',
+    'function markPaid(uint256 id) external',
     'function getInvoice(uint256 id) external view returns ((address merchant, uint256 amount, bool isPaid, string clientName, uint256 issuedDate, uint256 dueDate, string terms, string services))',
     'function nextInvoiceId() external view returns (uint256)',
     'event InvoiceCreated(uint256 indexed id, address indexed merchant, string clientName, uint256 amount)',
+    'event InvoiceSettled(uint256 indexed id, address indexed merchant, uint256 amount)',
 ]);
 
 export interface Invoice {
@@ -28,7 +30,7 @@ export interface Invoice {
 
 // Create client outside the hook to prevent recreation on every render
 const publicClient = createPublicClient({
-    chain: sepolia,
+    chain: baseSepolia,
     transport: http(undefined, {
         retryCount: 5,
         retryDelay: 2000,
@@ -54,7 +56,7 @@ export function useInvoiceContract() {
                 const provider = await wallet.getEthereumProvider();
                 const client = createWalletClient({
                     account: wallet.address as `0x${string}`,
-                    chain: sepolia,
+                    chain: baseSepolia,
                     transport: custom(provider),
                 });
                 setWalletClient(client);
@@ -88,6 +90,13 @@ export function useInvoiceContract() {
             try {
                 const [account] = await walletClient.getAddresses();
 
+                // Switch chain if needed (though Privy/Wallet usually handles this or prompts)
+                try {
+                    await walletClient.switchChain({ id: baseSepolia.id });
+                } catch (e) {
+                    console.warn('Failed to switch chain, user might be on wrong chain', e);
+                }
+
                 const hash = await walletClient.writeContract({
                     address: YELLOW_INVOICE_ADDRESS,
                     abi: YELLOW_INVOICE_ABI,
@@ -101,7 +110,7 @@ export function useInvoiceContract() {
                         data.services,
                     ],
                     account,
-                    chain: sepolia,
+                    chain: baseSepolia,
                 });
 
                 // Wait for confirmation
@@ -116,6 +125,49 @@ export function useInvoiceContract() {
                 return null;
             }
         }, [walletClient, publicClient]);
+
+    // Mark Invoice as Paid
+    const markAsPaid = useCallback(
+        async (id: number) => {
+            if (!walletClient) {
+                setError('Wallet not connected');
+                return null;
+            }
+
+            setIsLoading(true);
+            setError(null);
+
+            try {
+                const [account] = await walletClient.getAddresses();
+
+                // Switch chain if needed
+                try {
+                    await walletClient.switchChain({ id: baseSepolia.id });
+                } catch (e) {
+                    console.warn('Failed to switch chain', e);
+                }
+
+                const hash = await walletClient.writeContract({
+                    address: YELLOW_INVOICE_ADDRESS,
+                    abi: YELLOW_INVOICE_ABI,
+                    functionName: 'markPaid',
+                    args: [BigInt(id)],
+                    account,
+                    chain: baseSepolia,
+                });
+
+                const receipt = await publicClient.waitForTransactionReceipt({ hash });
+                setIsLoading(false);
+                return { hash, receipt };
+            } catch (e: any) {
+                console.error('Mark Paid Error:', e);
+                setError(e.message || 'Failed to mark as paid');
+                setIsLoading(false);
+                return null;
+            }
+        },
+        [walletClient, publicClient]
+    );
 
     // Get Invoice by ID
     const getInvoice = useCallback(async (id: number): Promise<Invoice | null> => {
@@ -167,11 +219,13 @@ export function useInvoiceContract() {
 
     return {
         createInvoice,
+        markAsPaid,
         getInvoice,
         getInvoiceCount,
         isLoading,
         error,
         isConnected: !!walletClient,
         contractAddress: YELLOW_INVOICE_ADDRESS,
+        chain: baseSepolia,
     };
 }

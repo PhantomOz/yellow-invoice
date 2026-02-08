@@ -91,7 +91,7 @@ interface UseYellowChannelResult {
     createChannel: () => Promise<void>;
     closeChannel: (channelId: string) => Promise<void>;
     getChannels: () => Promise<void>;
-    createPaymentSession: (merchantAddress: Address, amount: string) => Promise<void>;
+    createPaymentSession: (merchantAddress: Address, amount: string, invoiceId?: string) => Promise<void>;
     sendPayment: (merchantAddress: Address, amount: string) => Promise<void>;
     getLedgerBalances: () => Promise<void>;
     ledgerBalances: { asset: string; amount: string }[];
@@ -103,6 +103,7 @@ interface UseYellowChannelResult {
     supportedAssets: typeof SUPPORTED_ASSETS;
     networkAssets: NetworkAsset[];
     depositToLedger: (amount: string) => Promise<string | null>;
+    lastPaidInvoiceId: string | null;
     disconnect: () => void;
 }
 
@@ -125,6 +126,7 @@ export function useYellowChannel(
 ): UseYellowChannelResult {
     const [status, setStatus] = useState<YellowStatus>('idle');
     const [error, setError] = useState<string | null>(null);
+    const [lastPaidInvoiceId, setLastPaidInvoiceId] = useState<string | null>(null);
     const [jwtToken, setJwtToken] = useState<string | null>(null);
     const [channels, setChannels] = useState<ChannelInfo[]>([]);
     const [existingChannelId, setExistingChannelId] = useState<string | null>(null);
@@ -381,6 +383,22 @@ export function useYellowChannel(
                             setAppSessionId(newAppSessionId);
                             setStatus('session_created');
                             console.log('[Yellow] App session ID:', newAppSessionId);
+
+                            // Check for invoice ID in application identifier
+                            try {
+                                const appDef = sessionParams.definition || sessionParams.appDefinition;
+                                const appName = appDef?.application || sessionParams.application;
+
+                                if (appName && typeof appName === 'string' && appName.startsWith('yellow-invoice:')) {
+                                    const extractedId = appName.split(':')[1];
+                                    if (extractedId) {
+                                        console.log('[Yellow] Detected payment for invoice:', extractedId);
+                                        setLastPaidInvoiceId(extractedId);
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn('[Yellow] Failed to parse app session for invoice ID', err);
+                            }
                         } else {
                             console.error('[Yellow] No app_session_id in response:', message.params);
                             setError('No app_session_id returned');
@@ -532,8 +550,11 @@ export function useYellowChannel(
     /**
      * Create a payment session (app session) with a merchant
      * This sets up an off-chain payment channel where funds can be transferred
+     * @param merchantAddress - Address of the merchant
+     * @param amount - Amount to pay
+     * @param invoiceId - Optional invoice ID for attribution
      */
-    const createPaymentSession = useCallback(async (merchantAddress: Address, amount: string) => {
+    const createPaymentSession = useCallback(async (merchantAddress: Address, amount: string, invoiceId?: string) => {
         if (!clientRef.current || !sessionSignerRef.current || !address) {
             setError('Not connected to Yellow Network');
             return;
@@ -546,10 +567,13 @@ export function useYellowChannel(
             const checksummedAddress = getAddress(address);
             const checksummedMerchant = getAddress(merchantAddress);
 
+            // encode invoiceId in application identifier if provided
+            const appIdentifier = invoiceId ? `yellow-invoice:${invoiceId}` : 'yellow-invoice';
+
             // Define the application session parameters
             const appDefinition = {
                 protocol: RPCProtocolVersion.NitroRPC_0_2,
-                application: 'yellow-invoice',
+                application: appIdentifier,
                 participants: [checksummedAddress, checksummedMerchant],
                 weights: [100, 0],  // Payer has control
                 quorum: 100,
@@ -723,6 +747,7 @@ export function useYellowChannel(
         createPaymentSession,
         sendPayment,
         depositToLedger,
+        lastPaidInvoiceId,
         disconnect,
     };
 }
