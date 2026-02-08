@@ -83,6 +83,8 @@ export default function PaymentPage() {
             default: return 'Not connected';
         }
     };
+    loadTokens();
+  }, [sourceChain, getTokens]);
 
     const isProcessing = ['connecting', 'authenticating', 'creating_channel', 'sending_payment'].includes(yellowStatus);
     const isReady = yellowStatus === 'channel_created' || yellowStatus === 'authenticated' || existingChannelId !== null;
@@ -127,7 +129,24 @@ export default function PaymentPage() {
                     </div>
                 </div>
 
-                <hr className="border-white/10 mb-6" />
+  return (
+    <div className="min-h-screen bg-[var(--background)] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[var(--card)] border border-white/10 rounded-2xl p-6 shadow-xl">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-xl font-bold">Invoice #{invoice.id}</h1>
+            <p className="text-[var(--muted-foreground)] text-sm">
+              {invoice.details}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">${invoice.amount}</div>
+            <div className="text-xs text-[var(--muted-foreground)] uppercase">
+              {invoice.currency}
+            </div>
+          </div>
+        </div>
 
                 {/* Yellow Network Badge */}
                 <div className="flex items-center justify-center gap-2 mb-4 text-sm text-yellow-400">

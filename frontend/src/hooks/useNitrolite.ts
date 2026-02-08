@@ -1,18 +1,20 @@
 import {
-    NitroliteClient,
-    WalletStateSigner,
-    createECDSAMessageSigner,
-    createEIP712AuthMessageSigner,
-    createAuthRequestMessage,
-    createAuthVerifyMessageFromChallenge,
-    createCreateChannelMessage,
-    createResizeChannelMessage,
-    type RPCAsset
-} from '@erc7824/nitrolite';
-import { createPublicClient, createWalletClient, custom, Hex, http, Address, WalletClient } from 'viem';
-import { sepolia } from 'viem/chains';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { useState, useCallback, useEffect, useRef } from 'react';
+  NitroliteClient,
+  WalletStateSigner,
+  createECDSAMessageSigner,
+  createEIP712AuthMessageSigner,
+  createAuthRequestMessage,
+  createAuthVerifyMessageFromChallenge,
+  createCreateChannelMessage,
+  createResizeChannelMessage,
+  type RPCAsset,
+} from "@erc7824/nitrolite";
+import { createPublicClient, Hex, http, Address, WalletClient } from "viem";
+import { sepolia } from "viem/chains";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { useState, useCallback, useEffect, useRef } from "react";
+
+import { NITROLITE_ADDRESSES } from "../constants/address";
 
 // Configuration - Using Production ClearNode
 // Note: Sandbox (wss://clearnet-sandbox.yellow.com/ws) was returning connection errors
@@ -216,14 +218,27 @@ export function useNitrolite(walletClient: WalletClient | null | undefined, addr
     const fundChannel = useCallback(async (token: string, amount: bigint) => {
         if (!wsRef.current || !sessionKeyRef.current || !client || !address) throw new Error("Not connected");
 
-        setStatus('funding');
-        const sessionSigner = createECDSAMessageSigner(sessionKeyRef.current);
+            try {
+              const tx = await client.createChannel({
+                channel,
+                unsignedInitialState,
+                serverSignature: server_signature,
+              });
+              console.log("Channel Created", tx);
 
-        const createChannelMsg = await createCreateChannelMessage(
-            sessionSigner,
-            {
-                chain_id: CHAIN.id, // Target Chain
-                token: token as Hex,
+              // Now Resize (Fund)
+              const resizeMsg = await createResizeChannelMessage(
+                sessionSigner,
+                {
+                  channel_id: channel_id as `0x${string}`,
+                  allocate_amount: amount, // From Unified Balance
+                  funds_destination: address as Address,
+                },
+              );
+              wsRef.current?.send(resizeMsg);
+            } catch (e) {
+              console.error("Creation Failed", e);
+              reject(e);
             }
         );
         wsRef.current.send(createChannelMsg);

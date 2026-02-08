@@ -5,11 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   IconHome,
   IconFileInvoice,
-  IconArrowsLeftRight,
   IconBuildingBank,
-  IconCreditCard,
-  IconReceipt2,
-  IconBolt,
   IconSettings,
   IconActivity,
   IconLogout,
@@ -37,12 +33,6 @@ const navigation = [
     icon: IconFileInvoice,
     className: "sidebar-invoicing",
   },
-  // {
-  //   name: "Payments",
-  //   href: "/payments",
-  //   icon: IconArrowsLeftRight,
-  //   className: "sidebar-payments",
-  // },
   {
     name: "Payroll & Expenses",
     href: "/payroll",
@@ -138,7 +128,7 @@ export function Sidebar({
               <Link
                 key={item.name}
                 href={item.href}
-                onClick={() => onMobileClose()} // Close on navigation in mobile
+                onClick={() => onMobileClose()}
                 className={cn(
                   "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200",
                   item.className,
@@ -203,7 +193,6 @@ export function Sidebar({
                       </TooltipContent>
                     </Tooltip>
                   </div>
-                  {/* Normal link on mobile */}
                   <div className="md:hidden">{linkContent}</div>
                 </div>
               );

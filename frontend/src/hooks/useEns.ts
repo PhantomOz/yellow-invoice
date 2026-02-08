@@ -6,103 +6,12 @@ import {
   http,
   custom,
   encodeFunctionData,
-  parseEther,
-  toHex,
 } from "viem";
-import { base, baseSepolia, mainnet, sepolia } from "viem/chains";
+import { baseSepolia, sepolia } from "viem/chains";
 import { normalize } from "viem/ens";
 
-// L2 Registrar ABI (key functions)
-const YELLOW_REGISTRAR_ABI = [
-  {
-    name: "register",
-    type: "function",
-    inputs: [
-      { name: "label", type: "string" },
-      { name: "owner", type: "address" },
-    ],
-    outputs: [],
-    stateMutability: "payable",
-  },
-  {
-    name: "available",
-    type: "function",
-    inputs: [{ name: "label", type: "string" }],
-    outputs: [{ type: "bool" }],
-    stateMutability: "view",
-  },
-  {
-    name: "registrationFee",
-    type: "function",
-    inputs: [],
-    outputs: [{ type: "uint256" }],
-    stateMutability: "view",
-  },
-  {
-    name: "hasRegistered",
-    type: "function",
-    inputs: [{ name: "owner", type: "address" }],
-    outputs: [{ type: "bool" }],
-    stateMutability: "view",
-  },
-  {
-    name: "registeredNames",
-    type: "function",
-    inputs: [{ name: "owner", type: "address" }],
-    outputs: [{ type: "string" }],
-    stateMutability: "view",
-  },
-  {
-    name: "registry",
-    type: "function",
-    inputs: [],
-    outputs: [{ type: "address" }],
-    stateMutability: "view",
-  },
-] as const;
-
-const L2_REGISTRY_ABI = [
-  {
-    name: "setText",
-    type: "function",
-    inputs: [
-      { name: "node", type: "bytes32" },
-      { name: "key", type: "string" },
-      { name: "value", type: "string" },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    name: "text",
-    type: "function",
-    inputs: [
-      { name: "node", type: "bytes32" },
-      { name: "key", type: "string" },
-    ],
-    outputs: [{ type: "string" }],
-    stateMutability: "view",
-  },
-  {
-    name: "baseNode",
-    type: "function",
-    inputs: [],
-    outputs: [{ type: "bytes32" }],
-    stateMutability: "view",
-  },
-  {
-    name: "makeNode",
-    type: "function",
-    inputs: [
-      { name: "parentNode", type: "bytes32" },
-      { name: "label", type: "string" },
-    ],
-    outputs: [{ type: "bytes32" }],
-    stateMutability: "pure",
-  },
-] as const;
-
-const YELLOW_REGISTRAR_ADDRESS = "0x2F1f83A5802e24Cae6cb835406Fc71946231D97E";
+import { YELLOW_REGISTRAR_ABI, L2_REGISTRY_ABI } from "../constants/abi";
+import { YELLOW_REGISTRAR_ADDRESS } from "../constants/address";
 
 export function useYellowEns() {
   const [isLoading, setIsLoading] = useState(false);

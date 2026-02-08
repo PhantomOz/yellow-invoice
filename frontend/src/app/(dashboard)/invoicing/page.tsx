@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { InvoiceTable } from "@/components/invoicing/InvoiceTable";
 import { Button } from "@/components/ui/button";
 import { IconPlus, IconFileInvoice } from "@tabler/icons-react";
 import { useInvoiceModal } from "@/components/invoicing/InvoiceModalContext";
+import LoginButton from "@/components/auth/login-button";
 
 export default function InvoicingPage() {
   const { openModal } = useInvoiceModal();
@@ -19,17 +19,7 @@ export default function InvoicingPage() {
           </div>
           <h1>Invoices</h1>
         </div>
-        <div className="flex items-center gap-3 self-end md:self-auto">
-          <div className="text-right">
-            <p className="text-xs font-semibold">Jeffrey Owoloko</p>
-            <p className="text-[10px] text-[var(--muted-foreground)]">
-              jeffowoloko@gmail.com
-            </p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-xs font-medium">
-            JO
-          </div>
-        </div>
+        <LoginButton />
       </header>
 
       <SectionHeader

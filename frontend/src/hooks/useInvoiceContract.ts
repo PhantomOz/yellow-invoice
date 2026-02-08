@@ -15,16 +15,25 @@ const YELLOW_INVOICE_ABI = parseAbi([
 ]);
 
 export interface Invoice {
-    id: number;
-    merchant: Address;
-    amount: bigint;
-    isPaid: boolean;
-    clientName: string;
-    issuedDate: bigint;
-    dueDate: bigint;
-    terms: string;
-    services: string;
+  id: number;
+  merchant: Address;
+  amount: bigint;
+  isPaid: boolean;
+  clientName: string;
+  issuedDate: bigint;
+  dueDate: bigint;
+  terms: string;
+  services: string;
 }
+
+// Create client outside the hook to prevent recreation on every render
+const publicClient = createPublicClient({
+  chain: arcTestnet,
+  transport: http(undefined, {
+    retryCount: 5,
+    retryDelay: 2000,
+  }),
+});
 
 export function useInvoiceContract() {
     const { wallets } = useWallets();
@@ -60,17 +69,18 @@ export function useInvoiceContract() {
             }
         };
 
-        initWallet();
-    }, [wallets]);
+    initWallet();
+  }, [wallets]);
 
-    // Create Invoice
-    const createInvoice = useCallback(async (data: {
-        amount: bigint;
-        clientName: string;
-        issuedDate: number; // Unix timestamp
-        dueDate: number;    // Unix timestamp
-        terms: string;
-        services: string;
+  // Create Invoice
+  const createInvoice = useCallback(
+    async (data: {
+      amount: bigint;
+      clientName: string;
+      issuedDate: number; // Unix timestamp
+      dueDate: number; // Unix timestamp
+      terms: string;
+      services: string;
     }) => {
         if (!walletClient) {
             setError('Wallet not connected. Please connect via Privy first.');
