@@ -16,16 +16,21 @@ export function useInjectedWallet() {
 
         try {
             // Request accounts
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[];
 
-            // Create Client
-            // Note: In a real multi-chain app, we'd handle chain switching here too.
-            // For now, default to current chain of provider or Sepolia.
+            if (!accounts || accounts.length === 0) {
+                setError("No accounts returned from wallet");
+                return;
+            }
+
+            const account = accounts[0] as Address;
+
+            // Create Client WITH account and chain set (required for EIP-712 signing)
             const client = createWalletClient({
+                account: account,
+                chain: sepolia, // Required for EIP-712 domain
                 transport: custom(window.ethereum)
             });
-
-            const [account] = await client.getAddresses();
 
             setWalletClient(client);
             setAddress(account);
