@@ -17,20 +17,79 @@ import {
 } from "@tabler/icons-react";
 import { useInvoiceModal } from "@/components/invoicing/InvoiceModalContext";
 import { useYellowEns } from "@/hooks/useEns";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import LoginButton from "@/components/auth/login-button";
+import { useYellowChannel } from "@/hooks/useYellowChannel";
 
 import { useUserInvoices } from "@/hooks/useUserInvoices";
 import { type Address } from "viem";
+import { createWalletClient, custom } from "viem";
+import { sepolia } from "viem/chains";
 
 export default function Home() {
   const { openModal } = useInvoiceModal();
   const { getRegisteredName, checkHasSubname } = useYellowEns();
-  const { user } = usePrivy();
+  const { user, authenticated } = usePrivy();
+  const { wallets } = useWallets();
   const [ensName, setEnsName] = useState<string | null>(null);
+  const [walletClient, setWalletClient] = useState<any>(null);
 
   const walletAddress = user?.wallet?.address as Address | undefined;
   const { invoices, isLoading } = useUserInvoices(walletAddress || null);
+
+  // Create wallet client when wallet is available
+  useEffect(() => {
+    async function initWalletClient() {
+      const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+      if (embeddedWallet && walletAddress) {
+        try {
+          const provider = await embeddedWallet.getEthereumProvider();
+          const client = createWalletClient({
+            account: walletAddress,
+            chain: sepolia,
+            transport: custom(provider),
+          });
+          setWalletClient(client);
+        } catch (err) {
+          console.error('Error creating wallet client:', err);
+        }
+      }
+    }
+    if (authenticated && wallets.length > 0 && walletAddress) {
+      initWalletClient();
+    }
+  }, [authenticated, wallets, walletAddress]);
+
+  // Use Yellow Network hook with 0 allowance for dashboard (view-only mode)
+  const {
+    status: yellowStatus,
+    connect: connectYellow,
+    ledgerBalances,
+    getLedgerBalances,
+  } = useYellowChannel(walletClient, walletAddress, '0');
+
+  // Auto-connect to Yellow Network when wallet client is ready
+  useEffect(() => {
+    if (walletClient && walletAddress && yellowStatus === 'idle') {
+      console.log('[Dashboard] Auto-connecting to Yellow Network with 0 allowance...');
+      connectYellow();
+    }
+  }, [walletClient, walletAddress, yellowStatus, connectYellow]);
+
+  // Fetch and log ledger balances when authenticated
+  useEffect(() => {
+    if (yellowStatus === 'authenticated') {
+      console.log('[Dashboard] Fetching ledger balances...');
+      getLedgerBalances();
+    }
+  }, [yellowStatus, getLedgerBalances]);
+
+  // Log ledger balances when they update
+  useEffect(() => {
+    if (ledgerBalances.length > 0) {
+      console.log('[Dashboard] Ledger Balances:', ledgerBalances);
+    }
+  }, [ledgerBalances]);
 
   const stats = useMemo(() => {
     const now = new Date();

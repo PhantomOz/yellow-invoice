@@ -142,13 +142,12 @@ export function CreateInvoiceModal({
               {[1, 2, 3].map((s) => (
                 <div key={s} className="flex items-center gap-2">
                   <div
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      s === step
+                    className={`h-1.5 rounded-full transition-all duration-300 ${s === step
                         ? "w-8 bg-[var(--primary-cta-60)] shadow-[0_0_10px_rgba(253,208,0,0.4)]"
                         : s < step
                           ? "w-2 bg-[var(--primary-cta-90)]"
                           : "w-2 bg-[var(--muted)]"
-                    }`}
+                      }`}
                   />
                 </div>
               ))}
@@ -302,9 +301,9 @@ export function CreateInvoiceModal({
                               items.map((i) =>
                                 i.id === item.id
                                   ? {
-                                      ...i,
-                                      price: parseFloat(e.target.value) || 0,
-                                    }
+                                    ...i,
+                                    price: parseFloat(e.target.value) || 0,
+                                  }
                                   : i,
                               ),
                             )

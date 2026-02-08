@@ -8,7 +8,8 @@ export const privyConfig: PrivyClientConfig = {
     ethereum: {
       createOnLogin: "all-users",
     },
-    showWalletUIs: true,
+    // Disable wallet UIs to allow signing without confirmation popups
+    showWalletUIs: false,
     priceDisplay: {
       primary: "fiat-currency",
       secondary: "native-token",
