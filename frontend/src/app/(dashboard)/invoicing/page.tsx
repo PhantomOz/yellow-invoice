@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { IconPlus, IconFileInvoice } from "@tabler/icons-react";
 import { useInvoiceModal } from "@/components/invoicing/InvoiceModalContext";
 import LoginButton from "@/components/auth/login-button";
+import { usePrivy } from "@privy-io/react-auth";
 
 export default function InvoicingPage() {
   const { openModal } = useInvoiceModal();
+  const { authenticated } = usePrivy();
 
   return (
     <>
@@ -26,13 +28,15 @@ export default function InvoicingPage() {
         title="Recent Invoices"
         description="Manage your invoices and track payments."
         action={
-          <Button
-            className="bg-[var(--primary-cta-60)] hover:bg-[var(--primary-cta-40)] text-black font-semibold rounded-2xl shadow-[0_0_15px_rgba(253,224,87,0.15)] hover:shadow-[0_0_20px_rgba(253,224,87,0.3)] border-0 cursor-pointer"
-            size="default"
-            onClick={openModal}
-          >
-            <IconPlus size={16} className="mr-2" /> Create Invoice
-          </Button>
+          authenticated ? (
+            <Button
+              className="bg-[var(--primary-cta-60)] hover:bg-[var(--primary-cta-40)] text-black font-semibold rounded-2xl shadow-[0_0_15px_rgba(253,224,87,0.15)] hover:shadow-[0_0_20px_rgba(253,224,87,0.3)] border-0 cursor-pointer"
+              size="default"
+              onClick={openModal}
+            >
+              <IconPlus size={16} className="mr-2" /> Create Invoice
+            </Button>
+          ) : null
         }
       />
 

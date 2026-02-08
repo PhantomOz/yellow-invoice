@@ -470,11 +470,13 @@ export default function Home() {
           title="Get Paid"
           description="Create invoices and get paid in crypto by your clients."
           action={
-            <div onClick={openModal}>
-              <ActionButton>
-                <IconPlus size={16} /> Create Invoice
-              </ActionButton>
-            </div>
+            authenticated ? (
+              <div onClick={openModal}>
+                <ActionButton>
+                  <IconPlus size={16} /> Create Invoice
+                </ActionButton>
+              </div>
+            ) : null
           }
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
@@ -538,7 +540,7 @@ export default function Home() {
                 <p className="opacity-50">No data available</p>
               </div>
             )}
-            {!merchantInvoices.some((i) => i.status === "1" || i.settled) && (
+            {!merchantInvoices.some((i) => i.status === "1" || i.settled) && authenticated && (
               <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
                 <p className="mb-2">Start using the platform for activity.</p>
                 <button
