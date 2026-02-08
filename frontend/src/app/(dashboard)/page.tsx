@@ -22,6 +22,7 @@ import { useYellowEns } from "@/hooks/useEns";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import LoginButton from "@/components/auth/login-button";
 import { useYellowChannel } from "@/hooks/useYellowChannel";
+import { WithdrawModal } from "@/components/WithdrawModal";
 
 import { useUserInvoices } from "@/hooks/useUserInvoices";
 import { useInvoiceContract } from "@/hooks/useInvoiceContract";
@@ -88,8 +89,15 @@ export default function Home() {
     connect: connectYellow,
     ledgerBalances,
     getLedgerBalances,
+
     lastPaidInvoiceId,
-  } = useYellowChannel(walletClient, walletAddress, "0");
+    supportedChains,
+    withdrawFromLedger,
+    chainBalances,
+    channels,
+  } = useYellowChannel(walletClient, walletAddress, '0');
+
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
 
   // Auto-connect to Yellow Network when wallet client is ready
   useEffect(() => {
@@ -447,7 +455,15 @@ export default function Home() {
               <IconRefresh size={14} />
               Refresh
             </button>
+            <button
+              onClick={() => setIsWithdrawModalOpen(true)}
+              className="flex items-center gap-1 text-xs text-[var(--primary-cta-40)] hover:text-white transition-colors ml-4 font-semibold"
+            >
+              <IconArrowUpRight size={14} />
+              Withdraw
+            </button>
           </div>
+
           <div className="p-4 bg-white/5 rounded-xl">
             <div className="text-xs text-[var(--muted-foreground)] mb-1">
               Ledger Balance
@@ -464,6 +480,7 @@ export default function Home() {
           </div>
         </div>
       )}
+
 
       <section className="mb-16">
         <SectionHeader
@@ -593,6 +610,121 @@ export default function Home() {
           </StatCard>
         </div>
       </section>
+
+      {/* PAY SECTION */}
+      <section className="bg-[var(--card)] border border-white/5 rounded-[2rem] p-8 mt-12">
+        <SectionHeader
+          title="Pay"
+          description="Invite your partners to invoice you and save time when paying them in crypto."
+          action={
+            <div onClick={openModal}>
+              <ActionButton>
+                <IconPlus size={16} /> Invite Your Vendors
+              </ActionButton>
+            </div>
+          }
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+            <SummaryCard
+              label="Paid this month"
+              value={payerStats.paid}
+              icon={IconArrowUpRight}
+            />
+            <SummaryCard
+              label="To pay this month"
+              value={payerStats.toPay}
+              icon={IconClock}
+            />
+            <SummaryCard label="Bills to pay" value={payerStats.billsToPayCount.toString()} icon={IconReceipt} />
+          </div>
+        </SectionHeader>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <StatCard
+            title="Monthly Payouts"
+            subtitle="Cash Outflows"
+            className="col-span-1 lg:col-span-2"
+          >
+            {payerInvoices.some(i => i.status === '1') ? (
+              <div className="h-48 flex items-end justify-between gap-2 px-4 py-4">
+                {outflowsData.totals.map((total, i) => (
+                  <div key={i} className="flex flex-col items-center gap-2 group w-full">
+                    <div className="relative w-full flex justify-center h-32 items-end">
+                      <div
+                        className="w-full max-w-[40px] bg-[var(--primary-cta-40)] rounded-t-sm transition-all duration-300 group-hover:bg-[var(--primary-cta-60)]"
+                        style={{ height: `${(total / outflowsData.maxVal) * 100}%`, minHeight: total > 0 ? '4px' : '0' }}
+                      >
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/80 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                          ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase">
+                      {outflowsData.labels[i]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
+                <IconChartBar className="mb-2 opacity-20" size={32} />
+                <p className="opacity-50">No data available</p>
+              </div>
+            )}
+            {!payerInvoices.some(i => i.status === '1') && (
+              <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
+                <p className="mb-2">Start using the platform for activity.</p>
+                <div className="text-[var(--primary-cta-40)] font-medium">
+                  Invite Vendors
+                </div>
+              </div>
+            )}
+          </StatCard>
+
+          <StatCard
+            title="Your Top Vendors"
+            subtitle="Last 3 months"
+            icon={<IconHandStop size={20} />}
+          >
+            <div className="space-y-1">
+              {[
+                { name: "Acme Corp", amount: "$12,450.00", initials: "AC" },
+                { name: "Globex Inc", amount: "$8,200.00", initials: "GI" },
+                {
+                  name: "Soylent Corp",
+                  amount: "$5,100.00",
+                  initials: "SC",
+                },
+                { name: "Initech", amount: "$3,300.00", initials: "IN" },
+              ].map((client) => (
+                <div
+                  key={client.name}
+                  className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors -mx-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-[10px] font-medium text-[var(--muted-foreground)]">
+                      {client.initials}
+                    </div>
+                    <span className="text-sm font-medium">{client.name}</span>
+                  </div>
+                  <span className="text-sm font-mono text-[var(--muted-foreground)]">
+                    {client.amount}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </StatCard>
+        </div>
+      </section>
+      <WithdrawModal
+        isOpen={isWithdrawModalOpen}
+        onClose={() => setIsWithdrawModalOpen(false)}
+        onWithdraw={withdrawFromLedger}
+        balances={ledgerBalances}
+        chainBalances={chainBalances}
+        supportedChains={supportedChains}
+        channels={channels}
+      />
     </>
   );
 }

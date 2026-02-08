@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { Client } from 'yellow-ts';
-import { createPublicClient, http, type WalletClient, type Address, getAddress } from 'viem';
+import { createPublicClient, http, type WalletClient, type Address, getAddress, Hex } from 'viem';
 import { sepolia, baseSepolia, polygonAmoy } from 'viem/chains';
 import {
     Allocation,
@@ -26,6 +26,10 @@ import {
     WalletStateSigner,
     BalanceUpdateResponse,
     GetLedgerBalancesResponse,
+    createResizeChannelMessage,
+    FinalState,
+    State,
+
 } from '@erc7824/nitrolite';
 
 import { WS_URL, SUPPORTED_ASSETS } from '../constants/yellow';
@@ -73,6 +77,7 @@ interface ChannelInfo {
     channelId: string;
     txHash?: string;
     status: 'pending' | 'open' | 'closed';
+    balance?: string; // Track balance for resize
 }
 
 interface UseYellowChannelResult {
@@ -100,6 +105,9 @@ interface UseYellowChannelResult {
     depositToLedger: (amount: string) => Promise<string | null>;
     lastPaidInvoiceId: string | null;
     disconnect: () => void;
+    withdrawFromLedger: (amount: string, targetChainId: SupportedChainId) => Promise<string | null>;
+    chainBalances: { chainId: number; amount: string }[];
+    getChainBalances: () => Promise<void>;
 }
 
 /**
@@ -130,15 +138,27 @@ export function useYellowChannel(
     const [selectedChainId, setSelectedChainId] = useState<SupportedChainId>(sepolia.id);
     const [selectedAsset, setSelectedAsset] = useState<SupportedAssetAddress>(SUPPORTED_ASSETS[0].address);
     const [networkAssets, setNetworkAssets] = useState<NetworkAsset[]>([]);
+    const [chainBalances, setChainBalances] = useState<{ chainId: number; amount: string }[]>([]);
 
     // Refs for persistent values
     const clientRef = useRef<Client | null>(null);
     const sessionKeyRef = useRef<{ privateKey: `0x${string}`; address: Address } | null>(null);
     const sessionSignerRef = useRef<any>(null);
 
-    // Generate session key
+    // Generate or retrieve persistent session key
     const generateSessionKey = useCallback(() => {
-        const privateKey = generatePrivateKey();
+        let privateKey: `0x${string}`;
+        const storedKey = localStorage.getItem('yellow_session_private_key');
+
+        if (storedKey) {
+            privateKey = storedKey as `0x${string}`;
+            console.log('[Yellow] Restored session key from storage');
+        } else {
+            privateKey = generatePrivateKey();
+            localStorage.setItem('yellow_session_private_key', privateKey);
+            console.log('[Yellow] Generated new session key and saved to storage');
+        }
+
         const account = privateKeyToAccount(privateKey);
         sessionKeyRef.current = {
             privateKey,
@@ -280,7 +300,17 @@ export function useYellowChannel(
                         console.log('[Yellow] Creating channel with ytest.usd...');
                         setStatus('authenticated');
 
+                        // Fetch existing channels and balances to ensure we have context
+                        setTimeout(async () => {
+                            if (sessionSignerRef.current) {
+                                console.log('[Yellow] Automatically fetching channels/balances after auth...');
+                                const channelsMsg = await createGetChannelsMessage(sessionSignerRef.current);
+                                yellow.sendMessage(channelsMsg);
 
+                                const balancesMsg = await createGetLedgerBalancesMessage(sessionSignerRef.current);
+                                yellow.sendMessage(balancesMsg);
+                            }
+                        }, 500);
                         break;
 
                     case RPCMethod.GetChannels:
@@ -296,25 +326,49 @@ export function useYellowChannel(
                     case RPCMethod.CreateChannel:
                         console.log('[Yellow] Channel created:', message.params);
 
-                        // Get the chain object for the selected chain
-                        const selectedChain = getChainById(selectedChainId);
+                        // Get chain ID from wallet - this ensures we use the chain the wallet is actually on
+                        const walletChainId = await walletClient?.getChainId();
+                        const createChainId = walletChainId || selectedChainId;
+                        console.log('[Yellow] Using chain ID for on-chain ops:', createChainId);
+
+                        // Get the chain object for the wallet's actual chain
+                        const selectedChain = getChainById(createChainId as SupportedChainId);
 
                         // Submit to blockchain
-                        const publicClient = createPublicClient({
+                        let publicClient = createPublicClient({
                             chain: selectedChain,
                             transport: http(),
                         });
 
-                        const nitroliteClient = new NitroliteClient({
+                        let nitroliteClient = new NitroliteClient({
                             walletClient: walletClient as any,
                             publicClient: publicClient as any,
                             stateSigner: new WalletStateSigner(walletClient as any),
-                            addresses: getContractAddresses(selectedChainId),
-                            chainId: selectedChainId,
+                            addresses: getContractAddresses(createChainId),
+                            chainId: createChainId,
                             challengeDuration: BigInt(3600),
                         });
 
                         try {
+                            // Check if this is a channel with actual allocations
+                            // During normal auth flow, allocations are 0 - no need to submit on-chain
+                            const totalAllocation = (message.params.state.allocations as Allocation[]).reduce(
+                                (sum, a) => sum + BigInt(a.amount || 0), BigInt(0)
+                            );
+
+                            if (totalAllocation === BigInt(0)) {
+                                console.log('[Yellow] Channel has zero allocations - skipping on-chain submission');
+                                console.log('[Yellow] This is normal for initial channel setup.');
+
+                                // Still track the channel locally for resize/close operations later
+                                const channelData = message.params.channel as any;
+                                const offchainChannelId = channelData?.channelId || channelData?.channel_id || `offchain-${Date.now()}`;
+                                setChannels(prev => [...prev, { channelId: offchainChannelId as string, status: 'open' }]);
+                                setStatus('channel_created');
+                                break;
+                            }
+
+                            console.log('[Yellow] Channel has allocations, submitting on-chain...');
                             const { channelId, txHash } = await nitroliteClient.createChannel({
                                 channel: message.params.channel as unknown as Channel,
                                 unsignedInitialState: {
@@ -329,6 +383,16 @@ export function useYellowChannel(
                             console.log('[Yellow] Channel on-chain:', channelId, txHash);
                             setChannels(prev => [...prev, { channelId, txHash, status: 'open' }]);
                             setStatus('channel_created');
+
+                            const resizeMsg = await createResizeChannelMessage(
+                                sessionSignerRef.current,
+                                {
+                                    channel_id: channelId,
+                                    allocate_amount: BigInt(10), // Moves 20 units from Unified Balance -> Channel
+                                    funds_destination: address,
+                                }
+                            );
+                            clientRef.current!.sendMessage(resizeMsg);
                         } catch (e: any) {
                             console.error('[Yellow] Channel creation failed:', e);
                             setError(e.message);
@@ -422,11 +486,127 @@ export function useYellowChannel(
                         break;
 
                     case RPCMethod.CloseChannel:
-                        console.log('[Yellow] Channel closed:', message.params);
-                        // Refresh channels list
-                        setChannels(prev => prev.filter(ch => ch.channelId !== (message.params as any)?.channelId));
-                        setExistingChannelId(null);
-                        setStatus('authenticated');
+                        console.log('[Yellow] Channel closed (broker confirmed):', message.params);
+
+                        // Get chain ID from wallet to avoid mismatch
+                        const closeWalletChainId = await walletClient?.getChainId();
+                        const closeChainId = closeWalletChainId || selectedChainId;
+                        console.log('[Yellow] CloseChannel using chain ID:', closeChainId);
+
+                        // Create NitroliteClient for on-chain operations
+                        const closePublicClient = createPublicClient({
+                            chain: getChainById(closeChainId as SupportedChainId),
+                            transport: http(),
+                        });
+
+                        const closeNitroliteClient = new NitroliteClient({
+                            walletClient: walletClient as any,
+                            publicClient: closePublicClient as any,
+                            stateSigner: new WalletStateSigner(walletClient as any),
+                            addresses: getContractAddresses(closeChainId),
+                            chainId: closeChainId,
+                            challengeDuration: BigInt(3600),
+                        });
+
+                        const finalState: FinalState = {
+                            intent: message.params.state.intent as StateIntent,
+                            channelId: message.params.channelId as Hex,
+                            version: BigInt(message.params.state.version),
+                            data: message.params.state.stateData as Hex,
+                            allocations: message.params.state.allocations as Allocation[],
+                            serverSignature: message.params.serverSignature as Hex,
+                        };
+
+                        try {
+                            // Close channel on-chain
+                            console.log('[Yellow] Closing channel on-chain...');
+                            const closeTxHash = await closeNitroliteClient.closeChannel({
+                                finalState,
+                                stateData: message.params.state.stateData as Hex,
+                            });
+                            console.log('[Yellow] Channel closed on-chain:', closeTxHash);
+
+                            // Withdraw from Custody Contract to Wallet
+                            console.log('[Yellow] Withdrawing from custody to wallet...');
+                            const userAllocation = finalState.allocations.find(
+                                (a: Allocation) => a.destination?.toLowerCase() === address?.toLowerCase()
+                            );
+                            if (userAllocation) {
+                                const withdrawalTxHash = await closeNitroliteClient.withdrawal(
+                                    YTEST_USD_TOKEN,
+                                    userAllocation.amount
+                                );
+                                console.log('[Yellow] Funds withdrawn to wallet:', withdrawalTxHash);
+                            }
+
+                            // Refresh channels list
+                            setChannels(prev => prev.filter(ch => ch.channelId !== message.params.channelId));
+                            setExistingChannelId(null);
+                            setStatus('authenticated');
+
+                            // Refresh balances
+                            getLedgerBalances();
+                            getChainBalances();
+                        } catch (closeError: any) {
+                            console.error('[Yellow] On-chain close failed:', closeError);
+                            setError(closeError.message || 'Failed to close channel on-chain');
+                            setStatus('error');
+                        }
+                        break;
+
+                    case RPCMethod.ResizeChannel:
+                        // Get chain ID from wallet to avoid mismatch
+                        const resizeWalletChainId = await walletClient?.getChainId();
+                        const resizeChainId = resizeWalletChainId || selectedChainId;
+                        console.log('[Yellow] ResizeChannel using chain ID:', resizeChainId);
+
+                        publicClient = createPublicClient({
+                            chain: getChainById(resizeChainId as SupportedChainId),
+                            transport: http(),
+                        });
+
+                        nitroliteClient = new NitroliteClient({
+                            walletClient: walletClient as any,
+                            publicClient: publicClient as any,
+                            stateSigner: new WalletStateSigner(walletClient as any),
+                            addresses: getContractAddresses(resizeChainId),
+                            chainId: resizeChainId,
+                            challengeDuration: BigInt(3600),
+                        });
+
+                        const resizeState: FinalState = {
+                            intent: message.params.state.intent as StateIntent,
+                            channelId: message.params.channelId as Hex,
+                            version: BigInt(message.params.state.version),
+                            data: message.params.state.stateData as Hex,
+                            allocations: message.params.state.allocations as Allocation[],
+                            serverSignature: message.params.serverSignature as Hex,
+                        };
+
+                        // fetch the previous state
+                        const previousState = await nitroliteClient.getChannelData(message.params.channelId as Hex);
+                        console.log({
+                            previousState,
+                        })
+
+                        console.log({
+                            resizeState,
+                        })
+
+                        const { txHash: resizeChannelTxHash } = await nitroliteClient.resizeChannel({
+                            resizeState: {
+                                channelId: message.params.channelId as Hex,
+                                intent: message.params.state.intent as StateIntent,
+                                version: BigInt(message.params.state.version) as bigint,
+                                data: message.params.state.stateData as Hex,
+                                allocations: message.params.state.allocations as Allocation[],
+                                serverSignature: message.params.serverSignature as Hex,
+                            },
+                            proofStates: [previousState.lastValidState as State]
+                        });
+
+                        const closeMsg = await createCloseChannelMessage(sessionSignerRef.current, message.params.channelId as Hex, address);
+                        yellow.sendMessage(closeMsg);
                         break;
 
                     case RPCMethod.Error:
@@ -447,6 +627,8 @@ export function useYellowChannel(
                         setError(errorMsg);
                         setStatus('error');
                         break;
+
+
                 }
             });
 
@@ -739,6 +921,98 @@ export function useYellowChannel(
         };
     }, [disconnect]);
 
+    /**
+     * Withdraw funds from Yellow Network Unified Balance to target chain
+     * @param amount - Amount to withdraw
+     * @param targetChainId - Target chain ID (Base Sepolia, Sepolia, etc.)
+     */
+    const withdrawFromLedger = useCallback(async (amount: string, targetChainId: SupportedChainId): Promise<string | null> => {
+        if (!walletClient || !address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        try {
+            setStatus('depositing'); // Reuse status or new status 'withdrawing'
+            setError(null);
+
+
+            const createChannelMsg = await createCreateChannelMessage(
+                sessionSignerRef.current, // Sign with session key
+                {
+                    chain_id: targetChainId, // Sepolia
+                    token: YTEST_USD_TOKEN, // ytest.usd
+                }
+            );
+
+            clientRef.current!.sendMessage(createChannelMsg);
+
+
+            return "yes";
+
+
+        } catch (e: any) {
+            console.error('[Yellow] Error withdrawing:', e);
+            const msg = e.message || 'Failed to withdraw';
+            setError(msg);
+            setStatus('error');
+            throw new Error(msg);
+        }
+    }, [walletClient, address, getChainById, getContractAddresses, channels, ledgerBalances, closeChannel]);
+
+
+
+    // Check balances on all supported chains (L1)
+    const getChainBalances = useCallback(async () => {
+        if (!address) return;
+
+        const balances: { chainId: number; amount: string }[] = [];
+
+        for (const chain of SUPPORTED_CHAINS) {
+            try {
+                const publicClient = createPublicClient({
+                    chain: chain.chain,
+                    transport: http(),
+                });
+
+                const addresses = getContractAddresses(chain.id);
+                // We can use a lightweight read without full client setup
+                // But NitroliteService is convenient. Let's replicate logic manually to avoid overhead
+                // or just use NitroliteService static-ish way.
+                // Actually creating NitroliteService is cheap.
+                const s = new NitroliteClient({
+                    walletClient: { account: address } as any, // Mock wallet client for read
+                    publicClient: publicClient as any,
+                    stateSigner: {} as any,
+                    addresses,
+                    chainId: chain.id,
+                    challengeDuration: BigInt(3600),
+                });
+
+                const bal = await s.getAccountBalance(YTEST_USD_TOKEN);
+                // Result is BigInt
+                const amount = (Number(bal) / 1000000).toString(); // 6 decimals
+                if (Number(bal) > 0) {
+                    balances.push({ chainId: chain.id, amount });
+                }
+            } catch (e) {
+                console.warn(`[Yellow] Failed to fetch balance for chain ${chain.id}`, e);
+            }
+        }
+        setChainBalances(balances);
+        console.log('[Yellow] Chain balances (L1):', balances);
+    }, [address, getContractAddresses]);
+
+    // Fetch chain balances and channels on connect
+    useEffect(() => {
+        if (status === 'authenticated') {
+            getChainBalances();
+            getChannels(); // Also fetch channels
+        }
+    }, [status, getChainBalances, getChannels]);
+
+
+
     return {
         status,
         error,
@@ -764,5 +1038,8 @@ export function useYellowChannel(
         depositToLedger,
         lastPaidInvoiceId,
         disconnect,
+        withdrawFromLedger,
+        chainBalances,
+        getChainBalances,
     };
 }

@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useWallets } from '@privy-io/react-auth';
-import { createPublicClient, createWalletClient, custom, http, parseAbi, type WalletClient, type Address } from 'viem';
+import { useState, useCallback } from 'react';
+import { useWallets, useSendTransaction } from '@privy-io/react-auth';
+import { createPublicClient, http, encodeFunctionData, type Address } from 'viem';
 import { baseSepolia } from 'viem/chains';
 
 import { YELLOW_INVOICE_ADDRESS } from '../constants/address';
@@ -29,37 +29,11 @@ const publicClient = createPublicClient({
 
 export function useInvoiceContract() {
     const { wallets } = useWallets();
-    const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
+    const { sendTransaction } = useSendTransaction();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Initialize wallet client from Privy
-    useEffect(() => {
-        const initWallet = async () => {
-            const wallet = wallets[0];
-            if (!wallet) {
-                setWalletClient(null);
-                return;
-            }
-
-            try {
-                const provider = await wallet.getEthereumProvider();
-                const client = createWalletClient({
-                    account: wallet.address as `0x${string}`,
-                    chain: baseSepolia,
-                    transport: custom(provider),
-                });
-                setWalletClient(client);
-            } catch (e) {
-                console.error('Failed to init wallet client:', e);
-                setWalletClient(null);
-            }
-        };
-
-        initWallet();
-    }, [wallets]);
-
-    // Create Invoice
+    // Create Invoice with gas sponsorship
     const createInvoice = useCallback(
         async (data: {
             amount: bigint;
@@ -69,7 +43,8 @@ export function useInvoiceContract() {
             terms: string;
             services: string;
         }) => {
-            if (!walletClient) {
+            const wallet = wallets[0];
+            if (!wallet) {
                 setError('Wallet not connected. Please connect via Privy first.');
                 return null;
             }
@@ -78,17 +53,8 @@ export function useInvoiceContract() {
             setError(null);
 
             try {
-                const [account] = await walletClient.getAddresses();
-
-                // Switch chain if needed (though Privy/Wallet usually handles this or prompts)
-                try {
-                    await walletClient.switchChain({ id: baseSepolia.id });
-                } catch (e) {
-                    console.warn('Failed to switch chain, user might be on wrong chain', e);
-                }
-
-                const hash = await walletClient.writeContract({
-                    address: YELLOW_INVOICE_ADDRESS,
+                // Encode the createInvoice function call
+                const callData = encodeFunctionData({
                     abi: YELLOW_INVOICE_ABI,
                     functionName: 'createInvoice',
                     args: [
@@ -99,27 +65,40 @@ export function useInvoiceContract() {
                         data.terms,
                         data.services,
                     ],
-                    account,
-                    chain: baseSepolia,
                 });
 
-                // Wait for confirmation
-                const receipt = await publicClient.waitForTransactionReceipt({ hash });
+                // Send transaction with gas sponsorship
+                const txReceipt = await sendTransaction(
+                    {
+                        to: YELLOW_INVOICE_ADDRESS,
+                        data: callData,
+                        chainId: baseSepolia.id,
+                    },
+                    {
+                        sponsor: true, // Enable gas sponsorship
+                    },
+                );
 
                 setIsLoading(false);
-                return { hash, receipt };
+                return {
+                    hash: txReceipt.hash,
+                    receipt: txReceipt,
+                };
             } catch (e: any) {
                 console.error('Create Invoice Error:', e);
                 setError(e.message || 'Failed to create invoice');
                 setIsLoading(false);
                 return null;
             }
-        }, [walletClient, publicClient]);
+        },
+        [wallets, sendTransaction]
+    );
 
-    // Mark Invoice as Paid
+    // Mark Invoice as Paid with gas sponsorship
     const markAsPaid = useCallback(
         async (id: number) => {
-            if (!walletClient) {
+            const wallet = wallets[0];
+            if (!wallet) {
                 setError('Wallet not connected');
                 return null;
             }
@@ -128,27 +107,30 @@ export function useInvoiceContract() {
             setError(null);
 
             try {
-                const [account] = await walletClient.getAddresses();
-
-                // Switch chain if needed
-                try {
-                    await walletClient.switchChain({ id: baseSepolia.id });
-                } catch (e) {
-                    console.warn('Failed to switch chain', e);
-                }
-
-                const hash = await walletClient.writeContract({
-                    address: YELLOW_INVOICE_ADDRESS,
+                // Encode the markPaid function call
+                const callData = encodeFunctionData({
                     abi: YELLOW_INVOICE_ABI,
                     functionName: 'markPaid',
                     args: [BigInt(id)],
-                    account,
-                    chain: baseSepolia,
                 });
 
-                const receipt = await publicClient.waitForTransactionReceipt({ hash });
+                // Send transaction with gas sponsorship
+                const txReceipt = await sendTransaction(
+                    {
+                        to: YELLOW_INVOICE_ADDRESS,
+                        data: callData,
+                        chainId: baseSepolia.id,
+                    },
+                    {
+                        sponsor: true, // Enable gas sponsorship
+                    },
+                );
+
                 setIsLoading(false);
-                return { hash, receipt };
+                return {
+                    hash: txReceipt.hash,
+                    receipt: txReceipt,
+                };
             } catch (e: any) {
                 console.error('Mark Paid Error:', e);
                 setError(e.message || 'Failed to mark as paid');
@@ -156,10 +138,10 @@ export function useInvoiceContract() {
                 return null;
             }
         },
-        [walletClient, publicClient]
+        [wallets, sendTransaction]
     );
 
-    // Get Invoice by ID
+    // Get Invoice by ID (read-only, no wallet needed)
     const getInvoice = useCallback(async (id: number): Promise<Invoice | null> => {
         setIsLoading(true);
         setError(null);
@@ -190,9 +172,9 @@ export function useInvoiceContract() {
             setIsLoading(false);
             return null;
         }
-    }, [publicClient]);
+    }, []);
 
-    // Get Total Invoice Count
+    // Get Total Invoice Count (read-only, no wallet needed)
     const getInvoiceCount = useCallback(async (): Promise<number> => {
         try {
             const count = await publicClient.readContract({
@@ -205,16 +187,45 @@ export function useInvoiceContract() {
             console.error('Get Invoice Count Error:', e);
             return 0;
         }
-    }, [publicClient]);
+    }, []);
+
+    // Get Invoices by Merchant Address
+    const getInvoicesByMerchant = useCallback(async (merchant: Address): Promise<Invoice[]> => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Get total count first
+            const count = await getInvoiceCount();
+            const invoices: Invoice[] = [];
+
+            // Fetch all invoices and filter by merchant
+            for (let i = 1; i < count; i++) {
+                const invoice = await getInvoice(i);
+                if (invoice && invoice.merchant.toLowerCase() === merchant.toLowerCase()) {
+                    invoices.push(invoice);
+                }
+            }
+
+            setIsLoading(false);
+            return invoices;
+        } catch (e: any) {
+            console.error('Get Invoices by Merchant Error:', e);
+            setError(e.message || 'Failed to fetch invoices');
+            setIsLoading(false);
+            return [];
+        }
+    }, [getInvoiceCount, getInvoice]);
 
     return {
         createInvoice,
         markAsPaid,
         getInvoice,
         getInvoiceCount,
+        getInvoicesByMerchant,
         isLoading,
         error,
-        isConnected: !!walletClient,
+        isConnected: wallets.length > 0,
         contractAddress: YELLOW_INVOICE_ADDRESS,
         chain: baseSepolia,
     };
