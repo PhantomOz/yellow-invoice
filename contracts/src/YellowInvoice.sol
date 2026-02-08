@@ -50,6 +50,14 @@ contract YellowInvoice {
         return id;
     }
 
+    function markPaid(uint256 id) external {
+        Invoice storage invoice = invoices[id];
+        require(invoice.merchant == msg.sender, "Only merchant can mark as paid");
+        require(!invoice.isPaid, "Invoice already paid");
+        
+        invoice.isPaid = true;
+        emit InvoiceSettled(id, invoice.merchant, invoice.amount);
+    }
     
     // Getter for frontend convenience to read full struct
     function getInvoice(uint256 id) external view returns (Invoice memory) {

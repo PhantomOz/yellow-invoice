@@ -44,4 +44,45 @@ contract YellowInvoiceTest is Test {
         
         vm.stopPrank();
     }
+
+    function testMarkPaid() public {
+        vm.startPrank(merchant);
+        
+        uint256 id = invoiceContract.createInvoice(
+            1000 * 1e6,
+            "Acme Corp",
+            block.timestamp,
+            block.timestamp + 30 days,
+            "Net 30",
+            "Web Development"
+        );
+
+        YellowInvoice.Invoice memory invBefore = invoiceContract.getInvoice(id);
+        assertEq(invBefore.isPaid, false);
+
+        invoiceContract.markPaid(id);
+
+        YellowInvoice.Invoice memory invAfter = invoiceContract.getInvoice(id);
+        assertEq(invAfter.isPaid, true);
+
+        vm.stopPrank();
+    }
+
+    function testMarkPaidOnlyMerchant() public {
+        vm.startPrank(merchant);
+        uint256 id = invoiceContract.createInvoice(
+            1000 * 1e6,
+            "Acme Corp",
+            block.timestamp,
+            block.timestamp + 30 days,
+            "Net 30",
+            "Web Development"
+        );
+        vm.stopPrank();
+
+        vm.startPrank(client);
+        vm.expectRevert("Only merchant can mark as paid");
+        invoiceContract.markPaid(id);
+        vm.stopPrank();
+    }
 }
