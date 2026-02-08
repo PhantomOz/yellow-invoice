@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   IconUser,
   IconPlus,
@@ -14,9 +14,9 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useInvoiceContract } from "@/hooks/useInvoiceContract";
 import { useWallets } from "@privy-io/react-auth";
-import { arcTestnet } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 
-const ARC_TESTNET_CHAIN_ID = arcTestnet.id;
+const BASE_SEPOLIA_CHAIN_ID = baseSepolia.id;
 
 export function CreateInvoiceModal({
   isOpen,
@@ -74,17 +74,17 @@ export function CreateInvoiceModal({
           10,
         );
 
-        if (currentChainId !== ARC_TESTNET_CHAIN_ID) {
+        if (currentChainId !== BASE_SEPOLIA_CHAIN_ID) {
           setIsSwitchingChain(true);
           setSubmitError(null);
 
-          await wallet.switchChain(ARC_TESTNET_CHAIN_ID);
+          await wallet.switchChain(BASE_SEPOLIA_CHAIN_ID);
           setIsSwitchingChain(false);
         }
       } catch (switchError: any) {
         setIsSwitchingChain(false);
         setSubmitError(
-          `Failed to switch to Arc Testnet: ${switchError.message || "Unknown error"}`,
+          `Failed to switch to: ${switchError.message || "Unknown error"}`,
         );
         return;
       }
@@ -489,11 +489,6 @@ export function CreateInvoiceModal({
                     </div>
                   </div>
 
-                  {/* Network Indicator */}
-                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Creating on Arc Testnet
-                  </div>
 
                   {/* Error Display */}
                   {(submitError || error) && (

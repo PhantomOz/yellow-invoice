@@ -47,8 +47,8 @@ export function InvoiceTable() {
                 {invoices.map((invoice) => {
                   let status: "pending" | "paid" | "overdue" | "draft" =
                     "pending";
-                  if (invoice.status === "1") status = "paid";
-                  if (invoice.status === "2") status = "overdue";
+                  if (invoice.status === "1" || invoice.settled) status = "paid";
+                  if (invoice.status === "2" && !invoice.settled) status = "overdue";
 
                   // Format Amount (Assuming USDC 6 decimals)
                   const formattedAmount = (

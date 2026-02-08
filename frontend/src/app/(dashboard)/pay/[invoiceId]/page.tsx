@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useInjectedWallet } from '@/hooks/useInjectedWallet';
-import { useYellowChannel, SUPPORTED_ASSETS } from '@/hooks/useYellowChannel';
+import { useYellowChannel } from '@/hooks/useYellowChannel';
+import { SUPPORTED_ASSETS } from '@/constants/yellow';
 import { createPublicClient, http, formatUnits } from 'viem';
 import { sepolia, baseSepolia, polygonAmoy } from 'viem/chains';
 import {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { PrivyClientConfig } from "@privy-io/react-auth";
-import { arcTestnet, baseSepolia } from "viem/chains";
+import { sepolia, base, baseSepolia } from "viem/chains";
 
 export const privyConfig: PrivyClientConfig = {
   embeddedWallets: {
@@ -16,7 +16,7 @@ export const privyConfig: PrivyClientConfig = {
     },
   },
   defaultChain: baseSepolia,
-  supportedChains: [baseSepolia, arcTestnet],
+  supportedChains: [baseSepolia, sepolia, base],
 
   loginMethods: ["email", "google"],
   appearance: {

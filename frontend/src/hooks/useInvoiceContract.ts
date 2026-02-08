@@ -3,18 +3,8 @@ import { useWallets } from '@privy-io/react-auth';
 import { createPublicClient, createWalletClient, custom, http, parseAbi, type WalletClient, type Address } from 'viem';
 import { baseSepolia } from 'viem/chains';
 
-// Contract Address (Deployed on Base Sepolia)
-const YELLOW_INVOICE_ADDRESS = '0x4d04160633223533db789aab6610f54028295956' as const;
-
-// Contract ABI (Minimal for read/write)
-const YELLOW_INVOICE_ABI = parseAbi([
-    'function createInvoice(uint256 amount, string clientName, uint256 issuedDate, uint256 dueDate, string terms, string services) external returns (uint256)',
-    'function markPaid(uint256 id) external',
-    'function getInvoice(uint256 id) external view returns ((address merchant, uint256 amount, bool isPaid, string clientName, uint256 issuedDate, uint256 dueDate, string terms, string services))',
-    'function nextInvoiceId() external view returns (uint256)',
-    'event InvoiceCreated(uint256 indexed id, address indexed merchant, string clientName, uint256 amount)',
-    'event InvoiceSettled(uint256 indexed id, address indexed merchant, uint256 amount)',
-]);
+import { YELLOW_INVOICE_ADDRESS } from '../constants/address';
+import { YELLOW_INVOICE_ABI } from '../constants/abi';
 
 export interface Invoice {
     id: number;

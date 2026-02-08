@@ -1,5 +1,5 @@
 export const YELLOW_INVOICE_ADDRESS =
-  "0xb2FD819e68B58D2509FDC3393fCFd5860dD28c52" as const;
+  "0x4d04160633223533db789aab6610f54028295956" as const;
 
 export const NITROLITE_ADDRESSES = {
   custody: "0x019B65A265EB3363822f2752141b3dF16131b262", // Sepolia Custody
@@ -15,4 +15,7 @@ export const MOCK_MERCHANT_ADDRESS =
 export const MOCK_USDC_TOKEN = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 export const GRAPQL_URL =
-  "https://api.studio.thegraph.com/query/1713619/yellow-invoice/v0.0.1";
+  "https://api.studio.thegraph.com/query/1713619/yellow-invoice/v0.0.2";
+
+// ytest.usd is the only token supported on testnet
+export const YTEST_USD_TOKEN = "0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb" as const;

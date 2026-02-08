@@ -2,9 +2,11 @@ import { parseAbi } from "viem";
 
 export const YELLOW_INVOICE_ABI = parseAbi([
   "function createInvoice(uint256 amount, string clientName, uint256 issuedDate, uint256 dueDate, string terms, string services) external returns (uint256)",
+  "function markPaid(uint256 id) external",
   "function getInvoice(uint256 id) external view returns ((address merchant, uint256 amount, bool isPaid, string clientName, uint256 issuedDate, uint256 dueDate, string terms, string services))",
   "function nextInvoiceId() external view returns (uint256)",
   "event InvoiceCreated(uint256 indexed id, address indexed merchant, string clientName, uint256 amount)",
+  "event InvoiceSettled(uint256 indexed id, address indexed merchant, uint256 amount)",
 ]);
 
 export const ERC20_ABI = parseAbi([

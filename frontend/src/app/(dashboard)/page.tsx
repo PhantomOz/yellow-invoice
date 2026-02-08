@@ -30,14 +30,14 @@ import { createWalletClient, custom } from "viem";
 import { sepolia, baseSepolia } from "viem/chains";
 
 // ytest.usd token address and ABI for balance check
-const YTEST_USD_TOKEN = '0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb' as const;
+const YTEST_USD_TOKEN = "0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb" as const;
 const ERC20_ABI = [
   {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: '', type: 'uint256' }],
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
 
@@ -51,14 +51,18 @@ export default function Home() {
 
   const walletAddress = user?.wallet?.address as Address | undefined;
   // Fetch invoices where user is the merchant (to get paid)
-  const { invoices: merchantInvoices, isLoading: isLoadingMerchant } = useUserInvoices(walletAddress || null, 'merchant');
+  const { invoices: merchantInvoices, isLoading: isLoadingMerchant } =
+    useUserInvoices(walletAddress || null, "merchant");
   // Fetch invoices where user is the payer (to pay)
-  const { invoices: payerInvoices, isLoading: isLoadingPayer } = useUserInvoices(walletAddress || null, 'payer');
+  const { invoices: payerInvoices, isLoading: isLoadingPayer } =
+    useUserInvoices(walletAddress || null, "payer");
 
   // Create wallet client when wallet is available
   useEffect(() => {
     async function initWalletClient() {
-      const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+      const embeddedWallet = wallets.find(
+        (w) => w.walletClientType === "privy",
+      );
       if (embeddedWallet && walletAddress) {
         try {
           const provider = await embeddedWallet.getEthereumProvider();
@@ -69,7 +73,7 @@ export default function Home() {
           });
           setWalletClient(client);
         } catch (err) {
-          console.error('Error creating wallet client:', err);
+          console.error("Error creating wallet client:", err);
         }
       }
     }
@@ -85,27 +89,29 @@ export default function Home() {
     ledgerBalances,
     getLedgerBalances,
     lastPaidInvoiceId,
-  } = useYellowChannel(walletClient, walletAddress, '0');
+  } = useYellowChannel(walletClient, walletAddress, "0");
 
   // Auto-connect to Yellow Network when wallet client is ready
   useEffect(() => {
-    if (walletClient && walletAddress && yellowStatus === 'idle') {
-      console.log('[Dashboard] Auto-connecting to Yellow Network with 0 allowance...');
+    if (walletClient && walletAddress && yellowStatus === "idle") {
+      console.log(
+        "[Dashboard] Auto-connecting to Yellow Network with 0 allowance...",
+      );
       connectYellow();
     }
   }, [walletClient, walletAddress, yellowStatus, connectYellow]);
 
   // Fetch and log ledger balances when authenticated
   useEffect(() => {
-    if (yellowStatus === 'authenticated') {
-      console.log('[Dashboard] Fetching ledger balances...');
+    if (yellowStatus === "authenticated") {
+      console.log("[Dashboard] Fetching ledger balances...");
       getLedgerBalances();
     }
   }, [yellowStatus, getLedgerBalances]);
 
   useEffect(() => {
     if (ledgerBalances.length > 0) {
-      console.log('[Dashboard] Ledger Balances:', ledgerBalances);
+      console.log("[Dashboard] Ledger Balances:", ledgerBalances);
     }
   }, [ledgerBalances]);
 
@@ -115,11 +121,17 @@ export default function Home() {
   // Auto-mark invoice as paid when Yellow Network detects payment
   useEffect(() => {
     if (lastPaidInvoiceId) {
-      console.log('[Dashboard] Auto-marking invoice as paid:', lastPaidInvoiceId);
+      console.log(
+        "[Dashboard] Auto-marking invoice as paid:",
+        lastPaidInvoiceId,
+      );
       // Prompt user to sign the transaction to update status on-chain
       markAsPaid(Number(lastPaidInvoiceId)).then((res) => {
         if (res) {
-          console.log('[Dashboard] Invoice marked as paid automatically!', res.hash);
+          console.log(
+            "[Dashboard] Invoice marked as paid automatically!",
+            res.hash,
+          );
           // Ideally refresh invoices list here
           window.location.reload(); // Simple refresh to show new status
         }
@@ -128,7 +140,7 @@ export default function Home() {
   }, [lastPaidInvoiceId, markAsPaid]);
 
   // Wallet balance state
-  const [walletBalance, setWalletBalance] = useState<string>('0');
+  const [walletBalance, setWalletBalance] = useState<string>("0");
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Fetch wallet balance for ytest.usd token
@@ -145,7 +157,7 @@ export default function Home() {
       const balance = await publicClient.readContract({
         address: YTEST_USD_TOKEN,
         abi: ERC20_ABI,
-        functionName: 'balanceOf',
+        functionName: "balanceOf",
         args: [walletAddress],
       });
 
@@ -153,7 +165,7 @@ export default function Home() {
       const formatted = formatUnits(balance, 6);
       setWalletBalance(formatted);
     } catch (err) {
-      console.error('[Dashboard] Error fetching wallet balance:', err);
+      console.error("[Dashboard] Error fetching wallet balance:", err);
     } finally {
       setIsLoadingBalance(false);
     }
@@ -168,25 +180,33 @@ export default function Home() {
 
   // Format ledger balance (raw value is in 6 decimal units)
   const formattedLedgerBalance = useMemo(() => {
-    const ytestBalance = ledgerBalances.find(b => b.asset.toLowerCase() === 'ytest.usd');
-    if (!ytestBalance) return '0.00';
+    const ytestBalance = ledgerBalances.find(
+      (b) => b.asset.toLowerCase() === "ytest.usd",
+    );
+    if (!ytestBalance) return "0.00";
     const raw = parseFloat(ytestBalance.amount);
     // If value is very large, it's in raw units - divide by 10^6
     let value = raw;
     if (raw > 1000000) {
       value = raw / 1_000_000;
     }
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return value.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }, [ledgerBalances]);
 
   // Calculate top clients from real invoice data
   const topClients = useMemo(() => {
     // Group invoices by client name and sum amounts
-    const clientMap = new Map<string, { name: string; total: number; count: number }>();
+    const clientMap = new Map<
+      string,
+      { name: string; total: number; count: number }
+    >();
 
     merchantInvoices.forEach((invoice) => {
-      // Only count paid invoices for "Top Clients who paid"
-      if (invoice.status === '1' && invoice.clientName) {
+      // Count all clients from invoices
+      if (invoice.clientName) {
         const clientKey = invoice.clientName.toLowerCase();
         const amount = Number(invoice.amount) / 1_000_000;
 
@@ -195,7 +215,11 @@ export default function Home() {
           existing.total += amount;
           existing.count += 1;
         } else {
-          clientMap.set(clientKey, { name: invoice.clientName, total: amount, count: 1 });
+          clientMap.set(clientKey, {
+            name: invoice.clientName,
+            total: amount,
+            count: 1,
+          });
         }
       }
     });
@@ -206,7 +230,10 @@ export default function Home() {
       .slice(0, 4) // Top 4 clients
       .map((client) => ({
         name: client.name,
-        amount: client.total.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
+        amount: client.total.toLocaleString("en-US", {
+          style: "currency",
+          currency: "USD",
+        }),
         initials: client.name.slice(0, 2).toUpperCase(),
         count: client.count,
       }));
@@ -231,8 +258,8 @@ export default function Home() {
         createdDate.getMonth() === currentMonth &&
         createdDate.getFullYear() === currentYear;
 
-      // Status 1 is Paid
-      if (invoice.status === "1") {
+      // Status 1 is Paid, or if settled is true
+      if (invoice.status === "1" || invoice.settled) {
         const settledDate = invoice.settledAt
           ? new Date(Number(invoice.settledAt) * 1000)
           : createdDate;
@@ -282,8 +309,8 @@ export default function Home() {
         createdDate.getMonth() === currentMonth &&
         createdDate.getFullYear() === currentYear;
 
-      // Status 1 is Paid
-      if (invoice.status === "1") {
+      // Status 1 is Paid, or if settled is true
+      if (invoice.status === "1" || invoice.settled) {
         const settledDate = invoice.settledAt
           ? new Date(Number(invoice.settledAt) * 1000)
           : createdDate;
@@ -317,7 +344,7 @@ export default function Home() {
   }, [payerInvoices]);
 
   // Calculate Monthly Bar Chart Data
-  const getMonthlyData = (invoices: any[], type: 'inflows' | 'outflows') => {
+  const getMonthlyData = (invoices: any[], type: "inflows" | "outflows") => {
     const monthlyTotals = new Array(7).fill(0);
     const labels = [];
     const now = new Date();
@@ -330,14 +357,16 @@ export default function Home() {
 
     invoices.forEach((invoice) => {
       // Only count paid invoices for charts
-      if (invoice.status === "1") {
+      if (invoice.status === "1" || invoice.settled) {
         const amount = Number(invoice.amount) / 1_000_000;
         const date = invoice.settledAt
           ? new Date(Number(invoice.settledAt) * 1000)
           : new Date(Number(invoice.createdAt) * 1000);
 
         // Calculate months difference from now
-        const monthsDiff = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+        const monthsDiff =
+          (now.getFullYear() - date.getFullYear()) * 12 +
+          (now.getMonth() - date.getMonth());
 
         if (monthsDiff >= 0 && monthsDiff <= 6) {
           // Index 6 is current month, 0 is 6 months ago
@@ -352,12 +381,18 @@ export default function Home() {
     return {
       totals: monthlyTotals,
       labels,
-      maxVal
+      maxVal,
     };
   };
 
-  const inflowsData = useMemo(() => getMonthlyData(merchantInvoices, 'inflows'), [merchantInvoices]);
-  const outflowsData = useMemo(() => getMonthlyData(payerInvoices, 'outflows'), [payerInvoices]);
+  const inflowsData = useMemo(
+    () => getMonthlyData(merchantInvoices, "inflows"),
+    [merchantInvoices],
+  );
+  const outflowsData = useMemo(
+    () => getMonthlyData(payerInvoices, "outflows"),
+    [payerInvoices],
+  );
 
   // Fetch ENS name for the wallet
   useEffect(() => {
@@ -414,12 +449,18 @@ export default function Home() {
             </button>
           </div>
           <div className="p-4 bg-white/5 rounded-xl">
-            <div className="text-xs text-[var(--muted-foreground)] mb-1">Ledger Balance</div>
+            <div className="text-xs text-[var(--muted-foreground)] mb-1">
+              Ledger Balance
+            </div>
             <div className="text-2xl font-bold text-[var(--primary-cta-40)]">
               {formattedLedgerBalance}
-              <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">ytest.usd</span>
+              <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">
+                ytest.usd
+              </span>
             </div>
-            <div className="text-[10px] text-[var(--muted-foreground)] mt-1">Yellow Network ledger</div>
+            <div className="text-[10px] text-[var(--muted-foreground)] mt-1">
+              Yellow Network ledger
+            </div>
           </div>
         </div>
       )}
@@ -461,17 +502,27 @@ export default function Home() {
             subtitle="Cash Inflows"
             className="col-span-1 lg:col-span-2"
           >
-            {merchantInvoices.some(i => i.status === '1') ? (
+            {merchantInvoices.some((i) => i.status === "1" || i.settled) ? (
               <div className="h-48 flex items-end justify-between gap-2 px-4 py-4">
                 {inflowsData.totals.map((total, i) => (
-                  <div key={i} className="flex flex-col items-center gap-2 group w-full">
+                  <div
+                    key={i}
+                    className="flex flex-col items-center gap-2 group w-full"
+                  >
                     <div className="relative w-full flex justify-center h-32 items-end">
                       <div
                         className="w-full max-w-[40px] bg-[var(--primary-cta-40)] rounded-t-sm transition-all duration-300 group-hover:bg-[var(--primary-cta-60)]"
-                        style={{ height: `${(total / inflowsData.maxVal) * 100}%`, minHeight: total > 0 ? '4px' : '0' }}
+                        style={{
+                          height: `${(total / inflowsData.maxVal) * 100}%`,
+                          minHeight: total > 0 ? "4px" : "0",
+                        }}
                       >
                         <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/80 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                          ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          $
+                          {total.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </div>
                       </div>
                     </div>
@@ -487,7 +538,7 @@ export default function Home() {
                 <p className="opacity-50">No data available</p>
               </div>
             )}
-            {!merchantInvoices.some(i => i.status === '1') && (
+            {!merchantInvoices.some((i) => i.status === "1" || i.settled) && (
               <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
                 <p className="mb-2">Start using the platform for activity.</p>
                 <button
@@ -502,7 +553,7 @@ export default function Home() {
 
           <StatCard
             title="Your Top Clients"
-            subtitle="By paid invoices"
+            subtitle="By total volume"
             icon={<IconHandStop size={20} />}
           >
             <div className="space-y-1">
@@ -517,8 +568,12 @@ export default function Home() {
                         {client.initials}
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium">{client.name}</span>
-                        <span className="text-xs text-[var(--muted-foreground)]">{client.count} invoice{client.count > 1 ? 's' : ''}</span>
+                        <span className="text-sm font-medium">
+                          {client.name}
+                        </span>
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          {client.count} invoice{client.count > 1 ? "s" : ""}
+                        </span>
                       </div>
                     </div>
                     <span className="text-sm font-mono text-[var(--muted-foreground)]">
@@ -529,115 +584,9 @@ export default function Home() {
               ) : (
                 <div className="h-24 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs">
                   <IconHandStop className="mb-2 opacity-20" size={24} />
-                  <p className="opacity-50">No paid invoices yet</p>
+                  <p className="opacity-50">No invoice has been created</p>
                 </div>
               )}
-            </div>
-          </StatCard>
-        </div>
-      </section>
-
-      {/* PAY SECTION */}
-      <section className="bg-[var(--card)] border border-white/5 rounded-[2rem] p-8 mt-12">
-        <SectionHeader
-          title="Pay"
-          description="Invite your partners to invoice you and save time when paying them in crypto."
-          action={
-            <div onClick={openModal}>
-              <ActionButton>
-                <IconPlus size={16} /> Invite Your Vendors
-              </ActionButton>
-            </div>
-          }
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
-            <SummaryCard
-              label="Paid this month"
-              value={payerStats.paid}
-              icon={IconArrowUpRight}
-            />
-            <SummaryCard
-              label="To pay this month"
-              value={payerStats.toPay}
-              icon={IconClock}
-            />
-            <SummaryCard label="Bills to pay" value={payerStats.billsToPayCount.toString()} icon={IconReceipt} />
-          </div>
-        </SectionHeader>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <StatCard
-            title="Monthly Payouts"
-            subtitle="Cash Outflows"
-            className="col-span-1 lg:col-span-2"
-          >
-            {payerInvoices.some(i => i.status === '1') ? (
-              <div className="h-48 flex items-end justify-between gap-2 px-4 py-4">
-                {outflowsData.totals.map((total, i) => (
-                  <div key={i} className="flex flex-col items-center gap-2 group w-full">
-                    <div className="relative w-full flex justify-center h-32 items-end">
-                      <div
-                        className="w-full max-w-[40px] bg-[var(--primary-cta-40)] rounded-t-sm transition-all duration-300 group-hover:bg-[var(--primary-cta-60)]"
-                        style={{ height: `${(total / outflowsData.maxVal) * 100}%`, minHeight: total > 0 ? '4px' : '0' }}
-                      >
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/80 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                          ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase">
-                      {outflowsData.labels[i]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="h-32 flex flex-col items-center justify-center text-[var(--muted-foreground)] text-xs rounded-xl bg-white/5 m-4 border border-transparent">
-                <IconChartBar className="mb-2 opacity-20" size={32} />
-                <p className="opacity-50">No data available</p>
-              </div>
-            )}
-            {!payerInvoices.some(i => i.status === '1') && (
-              <div className="text-center text-xs text-[var(--muted-foreground)] mt-4">
-                <p className="mb-2">Start using the platform for activity.</p>
-                <div className="text-[var(--primary-cta-40)] font-medium">
-                  Invite Vendors
-                </div>
-              </div>
-            )}
-          </StatCard>
-
-          <StatCard
-            title="Your Top Vendors"
-            subtitle="Last 3 months"
-            icon={<IconHandStop size={20} />}
-          >
-            <div className="space-y-1">
-              {[
-                { name: "Acme Corp", amount: "$12,450.00", initials: "AC" },
-                { name: "Globex Inc", amount: "$8,200.00", initials: "GI" },
-                {
-                  name: "Soylent Corp",
-                  amount: "$5,100.00",
-                  initials: "SC",
-                },
-                { name: "Initech", amount: "$3,300.00", initials: "IN" },
-              ].map((client) => (
-                <div
-                  key={client.name}
-                  className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors -mx-2"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center text-[10px] font-medium text-[var(--muted-foreground)]">
-                      {client.initials}
-                    </div>
-                    <span className="text-sm font-medium">{client.name}</span>
-                  </div>
-                  <span className="text-sm font-mono text-[var(--muted-foreground)]">
-                    {client.amount}
-                  </span>
-                </div>
-              ))}
             </div>
           </StatCard>
         </div>

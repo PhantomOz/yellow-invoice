@@ -8,6 +8,7 @@ export interface Invoice {
   clientName: string;
   amount: string;
   status: string;
+  settled: boolean;
   createdAt: string;
   txHash: string;
   settledAt: string | null;
@@ -31,6 +32,7 @@ export function useUserInvoices(userAddress: Address | null, role: 'merchant' | 
           clientName
           amount
           status
+          settled
           createdAt
           txHash
           settledAt
