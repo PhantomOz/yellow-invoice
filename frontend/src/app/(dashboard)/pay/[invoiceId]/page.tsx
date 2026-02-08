@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useInjectedWallet } from '@/hooks/useInjectedWallet';
-import { useYellowChannel } from '@/hooks/useYellowChannel';
+import { useYellowChannel, SUPPORTED_ASSETS } from '@/hooks/useYellowChannel';
+import { createPublicClient, http, formatUnits } from 'viem';
+import { sepolia, baseSepolia, polygonAmoy } from 'viem/chains';
 import {
     IconWallet,
     IconLoader,
@@ -58,8 +60,112 @@ export default function PaymentPage() {
         selectedAsset,
         setSelectedAsset,
         supportedAssets,
+        networkAssets,
+        ledgerBalances,
+        getLedgerBalances,
+        depositToLedger,
         disconnect: disconnectYellow,
     } = useYellowChannel(walletClient, address, invoice.amount);
+
+    // Wallet balance state
+    const [walletBalance, setWalletBalance] = useState<string>('0');
+    const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+    const [isDepositing, setIsDepositing] = useState(false);
+
+    // Only ytest.usd is supported on testnet
+    const YTEST_USD_ADDRESS = '0xDB9F293e3898c9E5536A3be1b0C56c89d2b32DEb' as const;
+    const YTEST_USD_SYMBOL = 'ytest.usd';
+
+    // Get ledger balance for ytest.usd (raw value from API is in 6 decimal units)
+    const ledgerBalanceRaw = useMemo(() => {
+        const balance = ledgerBalances.find(b => b.asset.toLowerCase() === YTEST_USD_SYMBOL.toLowerCase());
+        return balance?.amount || '0';
+    }, [ledgerBalances]);
+
+    // Format ledger balance for display (ytest.usd has 6 decimals)
+    const ledgerBalance = useMemo(() => {
+        const raw = parseFloat(ledgerBalanceRaw);
+        // If the value is very large, it's in raw units - divide by 10^6
+        // Amount > 1000000 likely means it's in raw units (e.g., 100000000 = 100.00)
+        if (raw > 1000000) {
+            return (raw / 1_000_000).toString();
+        }
+        return ledgerBalanceRaw;
+    }, [ledgerBalanceRaw]);
+
+    // Check if ledger balance is sufficient
+    const hasEnoughLedgerBalance = useMemo(() => {
+        return parseFloat(ledgerBalance) >= parseFloat(invoice.amount);
+    }, [ledgerBalance, invoice.amount]);
+
+    // Fetch wallet balance for ytest.usd token
+    const fetchWalletBalance = useCallback(async () => {
+        if (!address) return;
+
+        setIsLoadingBalance(true);
+        try {
+            // Get chain object for selected chain
+            const chain = supportedChains.find(c => c.id === selectedChainId)?.chain || sepolia;
+
+            const publicClient = createPublicClient({
+                chain,
+                transport: http(),
+            });
+
+            // ERC20 balanceOf ABI
+            const balance = await publicClient.readContract({
+                address: YTEST_USD_ADDRESS,
+                abi: [{
+                    name: 'balanceOf',
+                    type: 'function',
+                    stateMutability: 'view',
+                    inputs: [{ name: 'account', type: 'address' }],
+                    outputs: [{ name: '', type: 'uint256' }],
+                }],
+                functionName: 'balanceOf',
+                args: [address],
+            });
+
+            // ytest.usd has 6 decimals
+            setWalletBalance(formatUnits(balance, 6));
+        } catch (err) {
+            console.error('Error fetching wallet balance:', err);
+            setWalletBalance('0');
+        } finally {
+            setIsLoadingBalance(false);
+        }
+    }, [address, selectedChainId, supportedChains]);
+
+    // Fetch ledger balance when authenticated
+    useEffect(() => {
+        if (yellowStatus === 'authenticated' || yellowStatus === 'session_created' || yellowStatus === 'channel_created') {
+            getLedgerBalances();
+        }
+    }, [yellowStatus, getLedgerBalances]);
+
+    // Fetch wallet balance when address or chain changes
+    useEffect(() => {
+        if (address) {
+            fetchWalletBalance();
+        }
+    }, [address, selectedChainId, fetchWalletBalance]);
+
+    // Handle deposit from wallet to ledger
+    const handleDeposit = async () => {
+        setIsDepositing(true);
+        try {
+            const txHash = await depositToLedger(invoice.amount);
+            if (txHash) {
+                console.log('[Pay] Deposit successful:', txHash);
+                // Refresh balances after deposit
+                await fetchWalletBalance();
+            }
+        } catch (err) {
+            console.error('[Pay] Deposit failed:', err);
+        } finally {
+            setIsDepositing(false);
+        }
+    };
 
     // Payment state
     const [paymentComplete, setPaymentComplete] = useState(false);
@@ -164,25 +270,79 @@ export default function PaymentPage() {
                                 ))}
                             </select>
                         </div>
-                        {/* Asset Selector */}
+                        {/* Asset Display - Only ytest.usd supported on testnet */}
                         <div>
                             <div className="text-xs text-[var(--muted-foreground)] mb-2 text-center">Asset</div>
-                            <select
-                                value={selectedAsset}
-                                onChange={(e) => setSelectedAsset(e.target.value as typeof selectedAsset)}
-                                className="w-full bg-[var(--background)] border border-white/10 rounded-lg px-3 py-2 text-sm font-medium text-center appearance-none cursor-pointer hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                                disabled={isProcessing}
-                            >
-                                {supportedAssets.map((asset) => (
-                                    <option key={asset.address} value={asset.address}>
-                                        {asset.symbol}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="w-full bg-[var(--background)] border border-white/10 rounded-lg px-3 py-2 text-sm font-medium text-center">
+                                ytest.usd
+                            </div>
                         </div>
                     </div>
                     <div className="text-xs text-[var(--muted-foreground)] mt-2 text-center">via Yellow ClearNode</div>
                 </div>
+
+                {/* Balance Display - Show ledger if sufficient, else wallet */}
+                {isConnected && (
+                    <div className="bg-white/5 rounded-lg p-3 mb-4">
+                        <div className="text-xs text-[var(--muted-foreground)] mb-2 text-center">
+                            Available Balance (ytest.usd)
+                        </div>
+                        {hasEnoughLedgerBalance ? (
+                            /* Show Ledger Balance - sufficient for payment */
+                            <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/10">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--muted-foreground)]">Ledger</span>
+                                    <span className="text-xs text-green-400">✓ Ready to pay</span>
+                                </div>
+                                <div className="text-xl font-bold text-center text-green-400 mt-1">
+                                    {parseFloat(ledgerBalance).toFixed(2)} ytest.usd
+                                </div>
+                            </div>
+                        ) : (
+                            /* Show Wallet Balance - needs funding */
+                            <div className={`p-3 rounded-lg border ${parseFloat(walletBalance) >= parseFloat(invoice.amount)
+                                ? 'border-yellow-500/30 bg-yellow-500/10'
+                                : 'border-red-500/30 bg-red-500/10'}`}>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--muted-foreground)]">Wallet</span>
+                                    <span className={`text-xs ${parseFloat(walletBalance) >= parseFloat(invoice.amount) ? 'text-yellow-400' : 'text-red-400'}`}>
+                                        {parseFloat(walletBalance) >= parseFloat(invoice.amount) ? 'Deposit required' : 'Insufficient funds'}
+                                    </span>
+                                </div>
+                                <div className={`text-xl font-bold text-center mt-1 ${parseFloat(walletBalance) >= parseFloat(invoice.amount) ? 'text-yellow-400' : 'text-red-400'}`}>
+                                    {isLoadingBalance ? '...' : `${parseFloat(walletBalance).toFixed(2)} ytest.usd`}
+                                </div>
+                                {/* Deposit Button - Only show if wallet has enough funds */}
+                                {parseFloat(walletBalance) >= parseFloat(invoice.amount) && (
+                                    <button
+                                        onClick={handleDeposit}
+                                        disabled={isDepositing || yellowStatus === 'depositing'}
+                                        className="w-full mt-3 py-2 px-4 bg-yellow-500 text-black rounded-lg font-medium hover:bg-yellow-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {(isDepositing || yellowStatus === 'depositing') ? (
+                                            <>
+                                                <IconLoader size={16} className="animate-spin" />
+                                                Depositing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <IconArrowRight size={16} />
+                                                Deposit {invoice.amount} ytest.usd to Ledger
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        <button
+                            onClick={() => { getLedgerBalances(); fetchWalletBalance(); }}
+                            className="w-full mt-2 text-xs text-[var(--muted-foreground)] hover:text-white flex items-center justify-center gap-1"
+                            disabled={isLoadingBalance}
+                        >
+                            <IconRefresh size={12} className={isLoadingBalance ? 'animate-spin' : ''} /> Refresh
+                        </button>
+                    </div>
+                )}
 
                 {/* Status Badge */}
                 <div className="mb-4 text-center">

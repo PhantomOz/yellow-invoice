@@ -51,6 +51,14 @@ export const SUPPORTED_ASSETS = [
 
 export type SupportedAssetAddress = typeof SUPPORTED_ASSETS[number]['address'];
 
+// Network asset type (from Yellow Network API)
+export interface NetworkAsset {
+    token: `0x${string}`;
+    chainId: number;
+    symbol: string;
+    decimals: number;
+}
+
 export type YellowStatus =
     | 'idle'
     | 'connecting'
@@ -62,6 +70,7 @@ export type YellowStatus =
     | 'creating_session'
     | 'session_created'
     | 'sending_payment'
+    | 'depositing'
     | 'payment_complete'
     | 'error';
 
@@ -92,6 +101,8 @@ interface UseYellowChannelResult {
     selectedAsset: SupportedAssetAddress;
     setSelectedAsset: (asset: SupportedAssetAddress) => void;
     supportedAssets: typeof SUPPORTED_ASSETS;
+    networkAssets: NetworkAsset[];
+    depositToLedger: (amount: string) => Promise<string | null>;
     disconnect: () => void;
 }
 
@@ -121,6 +132,7 @@ export function useYellowChannel(
     const [ledgerBalances, setLedgerBalances] = useState<{ asset: string; amount: string }[]>([]);
     const [selectedChainId, setSelectedChainId] = useState<SupportedChainId>(sepolia.id);
     const [selectedAsset, setSelectedAsset] = useState<SupportedAssetAddress>(SUPPORTED_ASSETS[0].address);
+    const [networkAssets, setNetworkAssets] = useState<NetworkAsset[]>([]);
 
     // Refs for persistent values
     const clientRef = useRef<Client | null>(null);
@@ -161,6 +173,13 @@ export function useYellowChannel(
         return found.chain;
     }, []);
 
+    // Get asset symbol from address
+    const getAssetSymbol = useCallback((assetAddress: SupportedAssetAddress) => {
+        const found = SUPPORTED_ASSETS.find(a => a.address === assetAddress);
+        if (!found) throw new Error('Unsupported asset');
+        return found.symbol;
+    }, []);
+
     // Connect and authenticate to Yellow Network
     const connect = useCallback(async () => {
         if (!walletClient || !address) {
@@ -198,7 +217,7 @@ export function useYellowChannel(
                 address: checksummedAddress,
                 session_key: sessionKey.address,
                 application: 'yellow-invoice',
-                allowances: [{ asset: 'ytest.usd', amount: allowanceAmount }], // Session spending limit based on invoice
+                allowances: [{ asset: getAssetSymbol(selectedAsset), amount: allowanceAmount }], // Session spending limit based on invoice
                 expires_at: sessionExpireTimestamp,
                 scope: 'yellow.invoice',
             });
@@ -225,7 +244,7 @@ export function useYellowChannel(
                             participant: sessionKey.address,
                             session_key: sessionKey.address,
                             expire: sessionExpireTimestamp,
-                            allowances: [{ asset: 'ytest.usd', amount: allowanceAmount }], // Session spending limit based on invoice
+                            allowances: [{ asset: getAssetSymbol(selectedAsset), amount: allowanceAmount }], // Session spending limit based on invoice
                             expires_at: sessionExpireTimestamp,
                         };
 
@@ -331,6 +350,17 @@ export function useYellowChannel(
                             balances.map((balance) => [balance.asset, balance.amount]),
                         );
                         console.log('Updating balances in real-time:', balancesMap);
+                        break;
+
+                    case RPCMethod.Assets:
+                        const networkAssetsList = (message.params as any)?.assets || [];
+                        console.log('[Yellow] Assets received:', networkAssetsList);
+                        setNetworkAssets(networkAssetsList.map((a: any) => ({
+                            token: a.token as `0x${string}`,
+                            chainId: a.chainId,
+                            symbol: a.symbol,
+                            decimals: a.decimals,
+                        })));
                         break;
 
                     case RPCMethod.GetLedgerBalances:
@@ -531,12 +561,12 @@ export function useYellowChannel(
             const allocations = [
                 {
                     participant: checksummedAddress,
-                    asset: 'ytest.usd',
+                    asset: getAssetSymbol(selectedAsset),
                     amount: amount,  // Payer's initial balance
                 },
                 {
                     participant: checksummedMerchant,
-                    asset: 'ytest.usd',
+                    asset: getAssetSymbol(selectedAsset),
                     amount: '0',  // Merchant starts with 0
                 },
             ];
@@ -558,6 +588,66 @@ export function useYellowChannel(
     }, [address]);
 
     /**
+     * Deposit tokens from wallet to Yellow Network ledger
+     * Uses NitroliteClient to handle approval + deposit in one flow
+     */
+    const depositToLedger = useCallback(async (amount: string): Promise<string | null> => {
+        if (!walletClient || !address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        try {
+            setStatus('depositing');
+            setError(null);
+
+            // Get chain config
+            const selectedChain = getChainById(selectedChainId);
+
+            const publicClient = createPublicClient({
+                chain: selectedChain,
+                transport: http(),
+            });
+
+            // ytest.usd token address
+            const tokenAddress = YTEST_USD_TOKEN;
+
+            // Convert amount to BigInt (ytest.usd has 6 decimals)
+            const depositAmount = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+
+            console.log(`[Yellow] Depositing ${amount} ytest.usd to ledger on chain ${selectedChainId}...`);
+
+            // Create NitroliteClient for the deposit
+            const nitroliteClient = new NitroliteClient({
+                walletClient: walletClient as any,
+                publicClient: publicClient as any,
+                stateSigner: new WalletStateSigner(walletClient as any),
+                addresses: getContractAddresses(selectedChainId),
+                chainId: selectedChainId,
+                challengeDuration: BigInt(3600),
+            });
+
+            // Execute deposit (handles approval automatically)
+            const txHash = await nitroliteClient.deposit(tokenAddress, depositAmount);
+
+            console.log(`[Yellow] Deposit successful! TxHash: ${txHash}`);
+
+            // Refresh ledger balances after deposit
+            setTimeout(() => {
+                getLedgerBalances();
+            }, 3000); // Wait 3s for indexing
+
+            setStatus('authenticated'); // Reset to authenticated
+            return txHash;
+        } catch (e: any) {
+            console.error('[Yellow] Error depositing:', e);
+            setError(e.message || 'Failed to deposit');
+            setStatus('error');
+            return null;
+        }
+    }, [walletClient, address, selectedChainId, getChainById, getContractAddresses, getLedgerBalances]);
+
+    /**
      * Send a direct payment to the merchant using Yellow Network transfer
      * This is a simpler approach than app sessions - just transfer funds directly
      */
@@ -576,7 +666,7 @@ export function useYellowChannel(
             // Direct transfer allocations - send amount to merchant
             const transferAllocations = [
                 {
-                    asset: 'ytest.usd',
+                    asset: getAssetSymbol(selectedAsset),
                     amount: amount,
                 },
             ];
@@ -629,8 +719,10 @@ export function useYellowChannel(
         selectedAsset,
         setSelectedAsset,
         supportedAssets: SUPPORTED_ASSETS,
+        networkAssets,
         createPaymentSession,
         sendPayment,
+        depositToLedger,
         disconnect,
     };
 }
