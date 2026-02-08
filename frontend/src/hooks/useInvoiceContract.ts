@@ -15,24 +15,24 @@ const YELLOW_INVOICE_ABI = parseAbi([
 ]);
 
 export interface Invoice {
-  id: number;
-  merchant: Address;
-  amount: bigint;
-  isPaid: boolean;
-  clientName: string;
-  issuedDate: bigint;
-  dueDate: bigint;
-  terms: string;
-  services: string;
+    id: number;
+    merchant: Address;
+    amount: bigint;
+    isPaid: boolean;
+    clientName: string;
+    issuedDate: bigint;
+    dueDate: bigint;
+    terms: string;
+    services: string;
 }
 
 // Create client outside the hook to prevent recreation on every render
 const publicClient = createPublicClient({
-  chain: arcTestnet,
-  transport: http(undefined, {
-    retryCount: 5,
-    retryDelay: 2000,
-  }),
+    chain: sepolia,
+    transport: http(undefined, {
+        retryCount: 5,
+        retryDelay: 2000,
+    }),
 });
 
 export function useInvoiceContract() {
@@ -40,11 +40,6 @@ export function useInvoiceContract() {
     const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const publicClient = createPublicClient({
-        chain: sepolia,
-        transport: http(),
-    });
 
     // Initialize wallet client from Privy
     useEffect(() => {
@@ -69,58 +64,58 @@ export function useInvoiceContract() {
             }
         };
 
-    initWallet();
-  }, [wallets]);
+        initWallet();
+    }, [wallets]);
 
-  // Create Invoice
-  const createInvoice = useCallback(
-    async (data: {
-      amount: bigint;
-      clientName: string;
-      issuedDate: number; // Unix timestamp
-      dueDate: number; // Unix timestamp
-      terms: string;
-      services: string;
-    }) => {
-        if (!walletClient) {
-            setError('Wallet not connected. Please connect via Privy first.');
-            return null;
-        }
+    // Create Invoice
+    const createInvoice = useCallback(
+        async (data: {
+            amount: bigint;
+            clientName: string;
+            issuedDate: number; // Unix timestamp
+            dueDate: number; // Unix timestamp
+            terms: string;
+            services: string;
+        }) => {
+            if (!walletClient) {
+                setError('Wallet not connected. Please connect via Privy first.');
+                return null;
+            }
 
-        setIsLoading(true);
-        setError(null);
+            setIsLoading(true);
+            setError(null);
 
-        try {
-            const [account] = await walletClient.getAddresses();
+            try {
+                const [account] = await walletClient.getAddresses();
 
-            const hash = await walletClient.writeContract({
-                address: YELLOW_INVOICE_ADDRESS,
-                abi: YELLOW_INVOICE_ABI,
-                functionName: 'createInvoice',
-                args: [
-                    data.amount,
-                    data.clientName,
-                    BigInt(data.issuedDate),
-                    BigInt(data.dueDate),
-                    data.terms,
-                    data.services,
-                ],
-                account,
-                chain: sepolia,
-            });
+                const hash = await walletClient.writeContract({
+                    address: YELLOW_INVOICE_ADDRESS,
+                    abi: YELLOW_INVOICE_ABI,
+                    functionName: 'createInvoice',
+                    args: [
+                        data.amount,
+                        data.clientName,
+                        BigInt(data.issuedDate),
+                        BigInt(data.dueDate),
+                        data.terms,
+                        data.services,
+                    ],
+                    account,
+                    chain: sepolia,
+                });
 
-            // Wait for confirmation
-            const receipt = await publicClient.waitForTransactionReceipt({ hash });
+                // Wait for confirmation
+                const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-            setIsLoading(false);
-            return { hash, receipt };
-        } catch (e: any) {
-            console.error('Create Invoice Error:', e);
-            setError(e.message || 'Failed to create invoice');
-            setIsLoading(false);
-            return null;
-        }
-    }, [walletClient, publicClient]);
+                setIsLoading(false);
+                return { hash, receipt };
+            } catch (e: any) {
+                console.error('Create Invoice Error:', e);
+                setError(e.message || 'Failed to create invoice');
+                setIsLoading(false);
+                return null;
+            }
+        }, [walletClient, publicClient]);
 
     // Get Invoice by ID
     const getInvoice = useCallback(async (id: number): Promise<Invoice | null> => {

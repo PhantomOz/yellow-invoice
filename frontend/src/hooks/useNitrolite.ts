@@ -1,13 +1,13 @@
 import {
-  NitroliteClient,
-  WalletStateSigner,
-  createECDSAMessageSigner,
-  createEIP712AuthMessageSigner,
-  createAuthRequestMessage,
-  createAuthVerifyMessageFromChallenge,
-  createCreateChannelMessage,
-  createResizeChannelMessage,
-  type RPCAsset,
+    NitroliteClient,
+    WalletStateSigner,
+    createECDSAMessageSigner,
+    createEIP712AuthMessageSigner,
+    createAuthRequestMessage,
+    createAuthVerifyMessageFromChallenge,
+    createCreateChannelMessage,
+    createResizeChannelMessage,
+    type RPCAsset,
 } from "@erc7824/nitrolite";
 import { createPublicClient, Hex, http, Address, WalletClient } from "viem";
 import { sepolia } from "viem/chains";
@@ -218,91 +218,85 @@ export function useNitrolite(walletClient: WalletClient | null | undefined, addr
     const fundChannel = useCallback(async (token: string, amount: bigint) => {
         if (!wsRef.current || !sessionKeyRef.current || !client || !address) throw new Error("Not connected");
 
-            try {
-              const tx = await client.createChannel({
-                channel,
-                unsignedInitialState,
-                serverSignature: server_signature,
-              });
-              console.log("Channel Created", tx);
+        setStatus('funding');
+        const sessionSigner = createECDSAMessageSigner(sessionKeyRef.current);
 
-              // Now Resize (Fund)
-              const resizeMsg = await createResizeChannelMessage(
-                sessionSigner,
-                {
-                  channel_id: channel_id as `0x${string}`,
-                  allocate_amount: amount, // From Unified Balance
-                  funds_destination: address as Address,
-                },
-              );
-              wsRef.current?.send(resizeMsg);
-            } catch (e) {
-              console.error("Creation Failed", e);
-              reject(e);
+        // 1. Send Create Channel Message
+        const createChannelMsg = await createCreateChannelMessage(
+            sessionSigner,
+            {
+                chain_id: CHAIN.id, // Target Chain
+                token: token as Hex,
             }
         );
         wsRef.current.send(createChannelMsg);
 
+        // 2. Return Promise that resolves when channel is created and funded
         return new Promise((resolve, reject) => {
             const handler = async (event: MessageEvent) => {
-                const response = JSON.parse(event.data.toString());
+                try {
+                    const response = JSON.parse(event.data.toString());
 
-                // Handle Create Channel Response
-                if (response.res && response.res[1] === 'create_channel') {
-                    const { channel_id, channel, state, server_signature } = response.res[2];
+                    // Handle Create Channel Response
+                    if (response.res && response.res[1] === 'create_channel') {
+                        const { channel_id, channel, state, server_signature } = response.res[2];
 
-                    // Submit to Chain
-                    const unsignedInitialState = {
-                        intent: state.intent,
-                        version: BigInt(state.version),
-                        data: state.state_data,
-                        allocations: state.allocations.map((a: any) => ({
-                            destination: a.destination,
-                            token: a.token,
-                            amount: BigInt(a.amount),
-                        })),
-                    };
+                        console.log('[Yellow] Channel proposal received, submitting to chain...');
 
-                    try {
-                        const tx = await client.createChannel({
-                            channel,
-                            unsignedInitialState,
-                            serverSignature: server_signature,
-                        });
-                        console.log("Channel Created", tx);
-                        setChannelId(channel_id);
+                        try {
+                            const { channelId, txHash } = await client.createChannel({
+                                channel: channel,
+                                unsignedInitialState: {
+                                    intent: state.intent,
+                                    version: BigInt(state.version),
+                                    data: state.state_data,
+                                    allocations: state.allocations,
+                                },
+                                serverSignature: server_signature,
+                            });
+                            console.log("Channel Created On-Chain", txHash);
+                            setChannelId(channelId);
 
-                        // Now Resize (Fund)
-                        const resizeMsg = await createResizeChannelMessage(
-                            sessionSigner,
-                            {
-                                channel_id: channel_id as `0x${string}`,
-                                allocate_amount: amount, // From Unified Balance
-                                funds_destination: address as Address,
-                            }
-                        );
-                        wsRef.current?.send(resizeMsg);
+                            // Now Resize (Fund)
+                            console.log("Funding channel (resize)...");
+                            const resizeMsg = await createResizeChannelMessage(
+                                sessionSigner,
+                                {
+                                    channel_id: channelId as `0x${string}`,
+                                    allocate_amount: amount,
+                                    funds_destination: address as Address,
+                                },
+                            );
+                            wsRef.current?.send(resizeMsg);
 
-                    } catch (e) {
-                        console.error("Creation Failed", e);
-                        reject(e);
+                            // Remove this specific handler after successful chain submission
+                            // Ideally we wait for resize confirmation, but this is a good checkpoint
+                            wsRef.current?.removeEventListener('message', handler);
+                            setStatus('connected'); // Back to connected state
+                            resolve(channelId);
+                        } catch (e) {
+                            console.error("Creation Failed", e);
+                            wsRef.current?.removeEventListener('message', handler);
+                            setStatus('error');
+                            reject(e);
+                        }
+                    } else if (response.error) {
+                        // Handle errors
+                        wsRef.current?.removeEventListener('message', handler);
+                        reject(new Error(response.error));
                     }
-                }
-
-                // Handle Resize Response
-                if (response.res && response.res[1] === 'resize_channel') {
-                    const { channel_id, state, server_signature } = response.res[2];
-
-                    // Submit Resize to Chain logic here...
-                    // For MVP, completing
-                    console.log("Resize Approved by Server", channel_id);
-                    resolve(channel_id);
-                    wsRef.current?.removeEventListener('message', handler);
+                } catch (e) {
+                    // Ignore parsing errors
                 }
             };
-            wsRef.current?.addEventListener('message', handler);
-        });
 
+            wsRef.current?.addEventListener('message', handler);
+
+            // Cleanup timeout
+            setTimeout(() => {
+                wsRef.current?.removeEventListener('message', handler);
+            }, 60000);
+        });
     }, [client, walletClient, address]);
 
     /**
