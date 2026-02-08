@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { usePrivy } from "@privy-io/react-auth";
 import {
   IconHome,
   IconFileInvoice,
@@ -35,7 +36,7 @@ const navigation = [
   },
   {
     name: "Payroll & Expenses",
-    href: "/payroll",
+    href: "#",
     icon: IconBuildingBank,
     className: "sidebar-payroll",
     comingSoon: true,
@@ -62,10 +63,10 @@ export function Sidebar({
   onMobileClose,
 }: SidebarProps) {
   const pathname = usePathname();
+  const { logout, authenticated } = usePrivy();
 
-  const handleLogout = () => {
-    console.log("Logout clicked");
-    // Placeholder for actual logout logic
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (
@@ -123,6 +124,10 @@ export function Sidebar({
         {/* Navigation */}
         <div className="flex-1 flex flex-col gap-2 px-4 py-4 overflow-y-auto">
           {navigation.map((item) => {
+            if (item.name === "Settings" && !authenticated) {
+              return null;
+            }
+
             const isActive = pathname === item.href;
             const linkContent = (
               <Link
@@ -203,47 +208,50 @@ export function Sidebar({
         </div>
 
         {/* Footer */}
-        <div className="px-3 py-4 border-t border-[var(--border)]">
-          {isCollapsed ? (
-            <>
-              <div className="hidden md:block">
-                <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={handleLogout}
-                      className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-white/5 hover:text-[var(--foreground)]"
+        {authenticated && (
+          <div className="px-3 py-4 border-t border-[var(--border)]">
+            {isCollapsed ? (
+              <>
+                <div className="hidden md:block">
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleLogout}
+                        className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-white/5 hover:text-[var(--foreground)]"
+                      >
+                        <IconLogout className="h-5 w-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="font-medium bg-[var(--card)] text-[var(--foreground)] border-[var(--border)]"
                     >
-                      <IconLogout className="h-5 w-5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="right"
-                    className="font-medium bg-[var(--card)] text-[var(--foreground)] border-[var(--border)]"
+                      Logout
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="md:hidden">
+                  
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-white/5 hover:text-[var(--foreground)]"
                   >
-                    Logout
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="md:hidden">
-                <button
-                  onClick={handleLogout}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-white/5 hover:text-[var(--foreground)]"
-                >
-                  <IconLogout className="h-5 w-5" />
-                  <span>Logout</span>
-                </button>
-              </div>
-            </>
-          ) : (
-            <button
-              onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-white/5 hover:text-[var(--foreground)]"
-            >
-              <IconLogout className="h-5 w-5" />
-              <span>Logout</span>
-            </button>
-          )}
-        </div>
+                    <IconLogout className="h-5 w-5" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-white/5 hover:text-[var(--foreground)]"
+              >
+                <IconLogout className="h-5 w-5" />
+                <span>Logout</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Collapse Toggle (Desktop Only) */}
         <button
